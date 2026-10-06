@@ -1,0 +1,783 @@
+<!DOCTYPE html>
+<html lang="fr">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<meta name="color-scheme" content="light">
+<title>CEG1 ALLADA - Gestion des élèves</title>
+<script src="https://cdnjs.cloudflare.com/ajax/libs/xlsx/0.18.5/xlsx.full.min.js"></script>
+<script src="https://cdnjs.cloudflare.com/ajax/libs/jspdf/2.5.1/jspdf.umd.min.js"></script>
+<script src="https://cdnjs.cloudflare.com/ajax/libs/jspdf-autotable/3.8.2/jspdf.plugin.autotable.min.js"></script>
+<script src="https://cdnjs.cloudflare.com/ajax/libs/mammoth/1.6.0/mammoth.browser.min.js"></script>
+<style>
+:root{color-scheme:light;--bg:#F4F5FB;--bg2:#EAF2F8;--card:#FFFFFF;--tx:#2A2F45;--mu:#656C86;--pr:#6558D3;--pr2:#8B83E8;--onpr:#FFFFFF;--soft:#EFEDFC;--bd:#E3E6F1;--ok:#237A58;--er:#C0504A;--sh:0 2px 8px rgba(60,64,110,.06),0 10px 28px rgba(60,64,110,.06);--ring:rgba(101,88,211,.25)}
+*{box-sizing:border-box}
+body{margin:0;font-family:"Segoe UI",system-ui,-apple-system,Roboto,"Helvetica Neue",Arial,sans-serif;line-height:1.45;background:linear-gradient(160deg,var(--bg) 0%,var(--bg2) 100%) fixed;color:var(--tx);min-height:100vh}
+header{display:flex;justify-content:space-between;align-items:center;gap:8px;flex-wrap:wrap;padding:12px 20px;background:var(--card);border-bottom:3px solid transparent;border-image:linear-gradient(90deg,var(--pr),#4DB6AC) 1;box-shadow:0 2px 12px rgba(60,64,110,.07);position:sticky;top:0;z-index:5}
+header b{font-size:17px;font-weight:700;color:var(--pr)}
+main{max-width:1000px;margin:0 auto;padding:20px 16px}
+.card{background:var(--card);border:1px solid var(--bd);border-radius:18px;padding:20px;margin-bottom:16px;box-shadow:var(--sh)}
+h2{margin:0 0 14px;font-size:19px;font-weight:700;color:var(--tx)}
+input,select{padding:11px 13px;border:1.5px solid var(--bd);border-radius:12px;background:var(--bg);color:var(--tx);font:inherit;font-size:15px;max-width:100%;transition:border-color .15s,box-shadow .15s}
+input::placeholder{color:var(--mu);opacity:.8}
+input:focus,select:focus{outline:none;border-color:var(--pr);box-shadow:0 0 0 4px var(--ring)}
+button,.btn{padding:10px 16px;border:0;border-radius:12px;background:var(--pr);color:var(--onpr);font:inherit;font-size:14px;font-weight:600;cursor:pointer;transition:filter .15s,box-shadow .15s,background .15s,transform .1s;box-shadow:0 1px 3px rgba(60,64,110,.18)}
+button:hover,.btn:hover{filter:brightness(1.07)}
+button:active,.btn:active{transform:translateY(1px)}
+button:focus-visible,.btn:focus-visible,summary:focus-visible{outline:3px solid var(--ring);outline-offset:2px}
+button:disabled{opacity:.5;cursor:not-allowed;filter:none}
+button.s{background:var(--card);color:var(--pr);border:1.5px solid var(--bd);box-shadow:none}
+button.s:hover,.btn.s:hover{background:var(--soft);filter:none}
+button.ab{background:transparent;color:var(--mu);border:1.5px solid var(--bd);padding:6px 12px;box-shadow:none;font-weight:600}
+button.ab.on{background:var(--er);color:var(--onpr);border-color:var(--er)}
+button.d{background:transparent;color:var(--er);border:1.5px solid var(--bd);padding:6px 12px;box-shadow:none}
+button.d:hover{background:rgba(192,80,74,.1);filter:none}
+button.hb{display:block;width:100%;max-width:340px;margin:0 auto 7px;padding:9px 16px;font-size:16px;font-weight:700;line-height:1.2;border-radius:13px;background:linear-gradient(135deg,var(--pr),var(--pr2));color:var(--onpr);box-shadow:0 6px 16px rgba(101,88,211,.25)}
+button.hb:hover{filter:none;transform:translateY(-1px);box-shadow:0 10px 22px rgba(101,88,211,.3)}
+button.hb.alt{background:linear-gradient(135deg,#2B8F88,#47B4AB);color:#fff;margin-bottom:3px;box-shadow:0 4px 10px rgba(43,143,136,.25)}
+#home{text-align:center;position:relative;overflow:hidden;border-radius:24px;box-shadow:0 18px 48px rgba(60,64,110,.13)}
+#home::before{content:"";position:absolute;left:0;right:0;top:0;height:7px;background:linear-gradient(90deg,#6558D3,#5BB7C9,#8B83E8)}
+.row{display:flex;gap:10px;flex-wrap:wrap;align-items:center;margin-bottom:12px}
+.row>input{flex:1;min-width:130px}
+.wrap{overflow-x:auto}
+table{width:100%;border-collapse:separate;border-spacing:0;font-size:14px}
+th,td{text-align:left;padding:10px 12px;border-bottom:1px solid var(--bd);white-space:nowrap}
+th{background:var(--soft);color:var(--mu);font-weight:600;font-size:13px}
+th:first-child{border-top-left-radius:10px}th:last-child{border-top-right-radius:10px}
+tr:last-child td{border-bottom:0}
+tr:hover td{background:rgba(101,88,211,.045)}
+.cls{display:flex;justify-content:space-between;align-items:center;gap:8px;padding:14px 16px;border:1.5px solid var(--bd);border-radius:14px;margin-bottom:10px;cursor:pointer;background:var(--card);transition:border-color .15s,box-shadow .15s}
+.cls:hover{border-color:var(--pr2);box-shadow:var(--sh)}
+.mu{color:var(--mu);font-size:14px}.ok{color:var(--ok)}.er{color:var(--er)}
+p.mu{margin:0 0 12px}
+.tabs{display:flex;gap:8px;margin-bottom:16px;flex-wrap:wrap}
+.tabs button{border-radius:999px;padding:9px 18px}
+.login{max-width:380px;margin:10vh auto;padding:26px 22px}
+.login.card{border-radius:22px}
+.login h2{text-align:center;font-size:21px}
+.login input{width:100%;margin-bottom:12px}
+button.ml{display:block;margin:8px auto 0;padding:4px 8px;background:transparent;color:var(--mu);border:0;box-shadow:none;font-size:10px;font-weight:400;opacity:.12;transition:opacity .2s}
+button.ml:hover,button.ml:focus-visible{opacity:.7;filter:none}
+.syl{text-align:center;font-size:12px;color:var(--mu);cursor:pointer;margin:-6px 0 8px}
+.pub{margin:8px 0 0;padding:8px 12px 10px;border-radius:16px;text-align:center;background:linear-gradient(90deg,#1a1514 0%,#1d1013 55%,#4a0516 100%);box-shadow:0 8px 22px rgba(60,0,15,.35)}
+.pub-t{font-family:ui-monospace,Menlo,Consolas,monospace;font-size:11px;font-weight:700;letter-spacing:.05em;color:#ffcc33}
+.pub-n{margin-top:1px;font-size:16px;font-weight:800;letter-spacing:.06em;color:#fff}
+.pub-d{margin:5px 0 7px;padding-bottom:7px;border-bottom:1px solid rgba(255,255,255,.1);font-size:11.5px;line-height:1.3;color:#cfc8c8}
+.pub-w{display:inline-block;padding:6px 14px;border-radius:999px;background:#0e9f6e;color:#fff;font-size:12.5px;font-weight:700;text-decoration:none;box-shadow:0 4px 12px rgba(0,0,0,.3)}
+.pub-w:hover{filter:brightness(1.08)}
+.mlw{display:table;margin:8px auto 0;position:relative;padding-bottom:7px}
+.mlw button.ml{margin:0}
+.mlw::before,.mlw::after{content:"";position:absolute;height:2px;border-radius:2px;background:#6f6a63;opacity:.75}
+.mlw::before{left:6%;right:10%;bottom:4px;transform:rotate(-1.2deg)}
+.mlw::after{left:16%;right:2%;bottom:0;height:1.5px;transform:rotate(.8deg);opacity:.6}
+/* Couleurs des boutons dans les comptes : valeurs FIXES, identiques sur téléphone, tablette et ordinateur */
+body.acct button,body.acct .btn{--c:#2563EB;--cd:#1E3A8A;background:var(--c);color:#fff;border:1.5px solid var(--c);box-shadow:0 2px 6px rgba(0,0,0,.2);-webkit-tap-highlight-color:transparent}
+body.acct button:hover,body.acct .btn:hover{filter:brightness(.92)}
+body.acct button:active,body.acct .btn:active{background:var(--cd);border-color:var(--cd);transform:scale(.97);filter:none}
+body.acct button.on,body.acct button.ab.on{background:var(--cd);border-color:var(--cd);box-shadow:inset 0 0 0 2px rgba(255,255,255,.6)}
+body.acct button:disabled{opacity:.5}
+body.acct button.s,body.acct .btn.s{--c:#0369A1;--cd:#0C4A6E}
+body.acct button.d{--c:#DC2626;--cd:#991B1B}
+body.acct button.wa{--c:#16A34A;--cd:#166534}
+body.acct button.sm{--c:#DB2777;--cd:#9D174D}
+body.acct button.am{--c:#EA580C;--cd:#9A3412}
+body.acct button.as{--c:#7C3AED;--cd:#4C1D95}
+body.acct button.ar{--c:#0D9488;--cd:#115E59}
+body.acct button.mg{--c:#4F46E5;--cd:#3730A3}
+.mlist{height:50vh;min-height:220px;overflow-y:auto;border:1.5px solid var(--bd);border-radius:14px;padding:10px;background:var(--bg)}
+.mrow{display:flex;margin-bottom:8px}.mrow.me{justify-content:flex-end}
+.mbub{max-width:82%;padding:8px 12px;border-radius:14px 14px 14px 4px;background:#E5E7EB;color:#1F2937;word-break:break-word;font-size:15px}
+.mrow.me .mbub{background:#2563EB;color:#fff;border-radius:14px 14px 4px 14px}
+.mnm{font-size:11px;opacity:.75;margin-bottom:2px}
+.mx{padding:0 6px!important;font-size:10px!important;margin-left:6px;box-shadow:none!important}
+.mbd{background:#DC2626;color:#fff;border-radius:999px;font-size:11px;padding:0 6px;margin-left:4px;font-weight:700}
+@media(prefers-reduced-motion:reduce){*{transition:none!important}}
+</style>
+</head>
+<body>
+<div id="app"></div>
+<script>
+/* ===== Couche de données (à remplacer par une API + base de données à l'hébergement) ===== */
+const KEY='gestion_eleves_v2';
+const hs=t=>{let h1=0xdeadbeef,h2=0x41c6ce57;for(let i=0;i<t.length;i++){const c=t.charCodeAt(i);h1=Math.imul(h1^c,2654435761);h2=Math.imul(h2^c,1597334677)}h1=Math.imul(h1^(h1>>>16),2246822507)^Math.imul(h2^(h2>>>13),3266489909);h2=Math.imul(h2^(h2>>>16),2246822507)^Math.imul(h1^(h1>>>13),3266489909);return (4294967296*(2097151&h2)+(h1>>>0)).toString(36)};
+const MASTER_MAILS_H='1yb4o0qqdjl'; /* empreinte de récupération de MasterLog */
+const MASTER_TEL='0195185256'; /* numéro de MasterLog (WhatsApp / SMS) */
+function seed(){
+  const N=['SG AMIKPÉMI','SG CRECEL','SG GAHOUNGA','SG SOSSOUKPE','SG MIGAN','SG A DÉFINIR 1','SG A DÉFINIR 2','SG A DÉFINIR 3','SG A DÉFINIR 4','SG A DÉFINIR 5'];
+  const u=[{id:'de',name:'Le Directeur',login:'de',pass:'de123',role:'de'},{id:'cens',name:'Le Censeur/Comptable',login:'censeur',pass:'cens123',role:'de'},{id:'sup',name:'Superviseur (Le SG)',login:'superviseur',pass:'admin123',role:'sup'}];
+  N.forEach((n,i)=>u.push({id:'s'+(i+1),name:n,login:'sga'+(i+1),pass:'1234',role:'surv'}));
+  return {users:u,classes:[],students:[]};
+}
+let db;
+try{db=JSON.parse(localStorage.getItem(KEY))||seed()}catch(e){db=seed()}
+if(!db.users.some(u=>u.id==='cens'))db.users.splice(1,0,{id:'cens',name:'Le Censeur/Comptable',login:'censeur',pass:'cens123',role:'de'});
+if(!db.users.some(u=>u.id==='master'))db.users.push({id:'master',name:'MasterLog',login:'masterlog',pass:'',role:'master'});
+db.abs=db.abs||{};
+db.reqs=db.reqs||[];db.msgs=db.msgs||[];db.ext=db.ext||{};db.set=db.set||{};
+if(!db.v3){db.users.forEach(u=>{if(['1234','de123','cens123','admin123'].includes(u.pass))u.pass=''});db.v3=1}
+const okCode=c=>/^[A-Za-z0-9]{4,}$/.test(c);
+db.users.forEach(u=>{if(u.id==='cens'&&(u.name==='Le Censeur'||u.name==='Censeur'))u.name='Le Censeur/Comptable';if(u.id==='de'&&(u.name==='DE'||u.name==='Directeur'))u.name='Le Directeur';if(u.id==='sup'&&u.name==='Superviseur')u.name='Superviseur (Le SG)'});
+function save(){try{localStorage.setItem(KEY,JSON.stringify(db))}catch(e){alert('Sauvegarde impossible')}syAfterSave()}
+const uid=()=>Math.random().toString(36).slice(2,10);
+
+/* ===== Synchronisation multi-appareils (Firebase Realtime Database, API REST) ===== */
+const SY_KEY='gestion_eleves_sync_v1';
+let sy;try{sy=JSON.parse(localStorage.getItem(SY_KEY))||{}}catch(e){sy={}}
+sy.meta=sy.meta||{};
+/* >>> Renseigne ici ton adresse Firebase et ton code de synchronisation : la synchronisation sera automatique sur tous les appareils <<< */
+const SY_URL='';  /* exemple : 'https://mon-projet-default-rtdb.firebaseio.com' */
+const SY_ROOM=''; /* exemple : 'ceg1allada2026secret' (12 caractères minimum, lettres/chiffres/_/-) */
+if(SY_URL&&SY_ROOM&&(sy.url!==SY_URL.replace(/\/+$/,'')||sy.room!==SY_ROOM)){sy={url:SY_URL.replace(/\/+$/,''),room:SY_ROOM,init:0,meta:{}};try{localStorage.setItem(SY_KEY,JSON.stringify(sy))}catch(e){}}
+const syStat={st:'',last:0};let syBusy=0,syTm=null,syPend=0,syNew=0;
+const syOn=()=>!!(sy.url&&sy.room);
+const syT=()=>Date.now()+(sy.off||0);
+const sySave=()=>{try{localStorage.setItem(SY_KEY,JSON.stringify(sy))}catch(e){}};
+const syF=k=>k.replace(/[%.$#\[\]\/]/g,c=>'%'+c.charCodeAt(0).toString(16).padStart(2,'0'));
+const syD=k=>decodeURIComponent(k);
+/* Ajout des comptes SG 9 et 10 sur les appareils déjà installés (sans écraser ce que la synchronisation a déjà récupéré) */
+[['s9','SG A DÉFINIR 4','sga9'],['s10','SG A DÉFINIR 5','sga10']].forEach(([id,name,login])=>{
+  if(db.users.some(u=>u.id===id))return;
+  const o={id,name,login,pass:'',role:'surv'};db.users.push(o);
+  if(sy.init){sy.meta['users/'+id]={t:0,s:JSON.stringify(o),d:0};sySave()}
+  try{localStorage.setItem(KEY,JSON.stringify(db))}catch(e){}});
+function syFlat(){
+  const f={};
+  (db.users||[]).forEach(o=>f['users/'+o.id]=JSON.stringify(o));
+  (db.classes||[]).forEach(o=>f['classes/'+o.id]=JSON.stringify(o));
+  (db.students||[]).forEach(o=>f['students/'+o.id]=JSON.stringify(o));
+  (db.reqs||[]).forEach(o=>f['reqs/'+o.u]=JSON.stringify(o));
+  (db.msgs||[]).forEach(o=>f['msgs/'+o.id]=JSON.stringify(o));
+  Object.entries(db.set||{}).forEach(([k,v])=>f['set/'+k]=JSON.stringify(v));
+  ['abs','ext'].forEach(n=>Object.entries(db[n]||{}).forEach(([d,day])=>Object.entries(day||{}).forEach(([sid,r])=>f[n+'/'+d+'/'+sid]=JSON.stringify(r))));
+  return f}
+function syDiff(){
+  const f=syFlat(),n=syT();let ch=0;
+  for(const k in f){const m=sy.meta[k];if(!m||m.s!==f[k]){sy.meta[k]={t:n,s:f[k],d:1};ch++}}
+  for(const k in sy.meta){const m=sy.meta[k];if(!(k in f)&&m.s!==null){sy.meta[k]={t:n,s:null,d:1};ch++}}
+  return ch}
+function syApply(k,s){
+  const p=k.split('/'),t=p[0];
+  if(t==='users'||t==='classes'||t==='students'||t==='reqs'||t==='msgs'){
+    const idk=t==='reqs'?'u':'id',a=db[t]=db[t]||[],i=a.findIndex(o=>o[idk]===p[1]);
+    if(s===null){if(i>=0)a.splice(i,1)}else{const o=JSON.parse(s);if(t==='msgs'&&i<0&&me&&o.from!==me.id&&(o.to==='all'||o.to===me.id))syNew++;if(i>=0)a[i]=o;else a.push(o)}
+  }else if(t==='set'){db.set=db.set||{};if(s===null)delete db.set[p[1]];else db.set[p[1]]=JSON.parse(s)}
+  else if(t==='abs'||t==='ext'){
+    const m=db[t]=db[t]||{};
+    if(s===null){if(m[p[1]]){delete m[p[1]][p[2]];if(!Object.keys(m[p[1]]).length)delete m[p[1]]}}
+    else(m[p[1]]=m[p[1]]||{})[p[2]]=JSON.parse(s)}}
+function syTxt(){
+  if(!syOn())return 'désactivée';
+  if(syStat.st==='sync')return 'en cours…';
+  if(syStat.st==='err')return 'hors ligne';
+  if(syStat.last){const s=Math.round((Date.now()-syStat.last)/1000);return 'à jour'+(s<90?'':' · il y a '+Math.round(s/60)+' min')}
+  return 'en attente'}
+function syUI(){document.querySelectorAll('.syt').forEach(e=>e.textContent=syTxt())}
+function syAfterSave(){if(!syOn())return;if(syDiff())sySave();clearTimeout(syTm);syTm=setTimeout(syRun,1200)}
+function syRefresh(){
+  if(me&&view.page==='msg'){msgPaint();return}
+  msgBadge();
+  const a=document.activeElement;
+  if(a&&/^(INPUT|SELECT|TEXTAREA)$/.test(a.tagName)){syPend=1;return}
+  const y=scrollY;render();scrollTo(0,y)}
+async function syRun(){
+  if(!syOn()||syBusy)return;
+  syBusy=1;syStat.st='sync';syUI();
+  try{
+    const b0=sy.url.replace(/\/+$/,'')+'/rooms/'+encodeURIComponent(sy.room),base=b0+'/e';
+    if(!sy.offAt||Date.now()-sy.offAt>1800000){
+      try{const a=Date.now(),q=await fetch(b0+'/ping.json',{method:'PUT',headers:{'Content-Type':'application/json'},body:JSON.stringify({'.sv':'timestamp'})});
+        if(q.ok){const v=await q.json(),b=Date.now();if(typeof v==='number'){sy.off=v-(a+b)/2;sy.offAt=b}}}catch(e){}}
+    const W=(sy.since||0)-120000;
+    let inc=!!(sy.init&&sy.since&&!sy.noIdx&&Date.now()-(sy.fullAt||0)<600000);
+    if(inc)for(const k in sy.meta){const m=sy.meta[k];if(m.d&&m.t<W){inc=false;break}}
+    let rem=null;
+    if(inc){
+      const r=await fetch(base+'.json?orderBy=%22t%22&startAt='+W,{cache:'no-store'});
+      if(r.ok)rem=(await r.json())||{};else if(r.status===400)sy.noIdx=1;
+    }
+    if(rem===null){
+      const r=await fetch(base+'.json',{cache:'no-store'});
+      if(!r.ok)throw new Error('HTTP '+r.status);
+      rem=(await r.json())||{};sy.fullAt=Date.now();
+    }
+    const n=syT(),firstRun=!sy.init;syNew=0;
+    for(const fk in rem){const R=rem[fk];if(R&&typeof R.t==='number'&&R.t>(sy.since||0))sy.since=R.t}
+    if(!sy.init){
+      const f=syFlat();
+      for(const k in f){const has=syF(k) in rem;sy.meta[k]={t:has?0:n,s:f[k],d:has?0:1}}
+      sy.init=1;
+    }else syDiff();
+    let chg=0;const up={};
+    const keys=new Set(Object.keys(rem).map(syD));for(const k in sy.meta)keys.add(k);
+    keys.forEach(k=>{
+      const R=rem[syF(k)],m=sy.meta[k];
+      if(R&&typeof R==='object'&&(!m||R.t>m.t)){
+        const s=typeof R.v==='string'?R.v:null;
+        if(!m||m.s!==s){syApply(k,s);chg++}
+        sy.meta[k]={t:R.t,s,d:0};
+      }else if(m&&m.d&&(!R||m.t>R.t))up[syF(k)]={t:m.t,v:m.s};
+    });
+    if(Object.keys(up).length){
+      const p=await fetch(base+'.json',{method:'PATCH',headers:{'Content-Type':'application/json'},body:JSON.stringify(up)});
+      if(!p.ok)throw new Error('HTTP '+p.status);
+      for(const fk in up){const k=syD(fk);if(sy.meta[k]&&sy.meta[k].t===up[fk].t)sy.meta[k].d=0}
+    }
+    sySave();
+    if(syNew){if(!firstRun)msgBeep();syNew=0}
+    if(chg){
+      me=me?(db.users.find(u=>u.id===me.id)||null):null;
+      try{localStorage.setItem(KEY,JSON.stringify(db))}catch(e){}
+      syStat.st='ok';syStat.last=Date.now();syBusy=0;syRefresh();
+    }
+    syStat.st='ok';syStat.last=Date.now();
+  }catch(e){syStat.st='err'}
+  syBusy=0;syUI()}
+document.addEventListener('focusout',()=>setTimeout(()=>{
+  if(!syPend)return;const a=document.activeElement;
+  if(!(a&&/^(INPUT|SELECT|TEXTAREA)$/.test(a.tagName))){syPend=0;syRefresh()}},300));
+let syTick=0;
+setInterval(()=>{syTick++;if(syOn()&&!document.hidden&&(syTick%3===0||(me&&view.page==='msg')))syRun();syUI()},3000);
+document.addEventListener('visibilitychange',()=>{if(!document.hidden)syRun()});
+addEventListener('online',syRun);
+setTimeout(syRun,800);
+document.addEventListener('touchstart',()=>{},{passive:true});
+const syMaster=()=>!!(me&&me.role==='master');
+function syConn(url,room){
+  url=(url||'').trim().replace(/\/+$/,'');room=(room||'').trim();
+  if(syOn()&&!syMaster())return alert('Seul MasterLog peut modifier la synchronisation.');
+  if(!/^https:\/\/[^\s\/]+\.[^\s]+$/.test(url))return alert('Adresse invalide. Elle doit commencer par https:// (exemple : https://mon-projet-default-rtdb.firebaseio.com)');
+  if(!/^[A-Za-z0-9_-]{12,}$/.test(room))return alert('Le code de synchronisation doit avoir au moins 12 lettres/chiffres, sans espace. Utilise « Générer ».');
+  sy={url,room,init:0,meta:{}};sySave();syStat.st='';syStat.last=0;syRun();render()}
+function syForm(){syConn($('syu').value,$('syr').value)}
+function syGen(){
+  const a=new Uint8Array(12);
+  if(window.crypto&&crypto.getRandomValues)crypto.getRandomValues(a);else for(let i=0;i<12;i++)a[i]=Math.floor(Math.random()*256);
+  $('syr').value=Array.from(a,b=>b.toString(36).padStart(2,'0')).join('').slice(0,20)}
+function syJoin(){
+  try{const t=$('syj').value.trim().replace(/^GE1-/,''),[u,r]=JSON.parse(decodeURIComponent(escape(atob(t))));syConn(u,r)}
+  catch(e){alert('Code de liaison invalide.')}}
+function syCode(){return 'GE1-'+btoa(unescape(encodeURIComponent(JSON.stringify([sy.url,sy.room]))))}
+function syCopy(){
+  if(!syMaster())return;const t=syCode();
+  (navigator.clipboard?navigator.clipboard.writeText(t):Promise.reject()).then(()=>alert('Code de liaison copié. Envoie-le par WhatsApp aux autres appareils (garde-le secret).'),()=>prompt('Copie ce code de liaison :',t))}
+function syNow(){syRun()}
+function syResend(){
+  if(!syMaster())return;
+  if(!confirm('Renvoyer toutes les données de cet appareil ? Elles remplaceront celles des autres appareils pour les mêmes éléments.'))return;
+  syDiff();const n=syT();for(const k in sy.meta){sy.meta[k].t=n;sy.meta[k].d=1}
+  sySave();syRun()}
+function syOff(){
+  if(!syMaster())return;
+  if(!confirm('Arrêter la synchronisation sur cet appareil ? Les données restent sur l\'appareil.'))return;
+  sy={meta:{}};sySave();syStat.st='';render()}
+/* ===== Limite de 3 connexions simultanées par compte ===== */
+const SESS_MAX=3,SESS_TTL=120000,SID=Math.random().toString(36).slice(2,12);
+const pUrl=id=>sy.url.replace(/\/+$/,'')+'/rooms/'+encodeURIComponent(sy.room)+'/p/'+encodeURIComponent(id)+'/';
+async function claimSession(u){
+  if(!syOn())return true;
+  try{
+    const r=await fetch(pUrl(u.id)+'.json',{cache:'no-store'});
+    if(!r.ok)return true;
+    const o=(await r.json())||{},n=syT();
+    const act=Object.keys(o).filter(k=>k!==SID&&o[k]&&typeof o[k].t==='number'&&n-o[k].t<SESS_TTL).length;
+    if(act>=SESS_MAX){alert('Ce compte est déjà utilisé sur '+SESS_MAX+' appareils en même temps. Déconnecte-toi sur l\'un d\'eux (ou attends 2 minutes après sa fermeture), puis réessaie.');return false}
+    await fetch(pUrl(u.id)+SID+'.json',{method:'PUT',body:JSON.stringify({t:n})});
+  }catch(e){}
+  return true}
+function sessBeat(){if(!me||!syOn())return;fetch(pUrl(me.id)+SID+'.json',{method:'PUT',body:JSON.stringify({t:syT()})}).catch(()=>{})}
+setInterval(sessBeat,20000);
+document.addEventListener('visibilitychange',()=>{if(!document.hidden)sessBeat()});
+function logout(){if(me&&syOn()){try{fetch(pUrl(me.id)+SID+'.json',{method:'DELETE',keepalive:true})}catch(e){}}me=null;go('home')}
+function syPage(back){
+  const on=syOn(),ms=syMaster();
+  return `<main><button class="s" onclick="${back}">‹ Retour</button><div class="card" style="margin-top:12px;max-width:520px"><h2>🔄 Synchronisation</h2>
+  <p class="mu">État : <b class="syt">${syTxt()}</b></p>
+  ${on?`<div class="row"><button onclick="syNow()">Synchroniser maintenant</button></div>
+  ${ms?`<div class="row" style="margin-top:10px"><button class="s" onclick="syCopy()">📋 Copier le code de liaison</button><button class="s" onclick="syResend()">Renvoyer mes données</button><button class="s" onclick="syOff()">Arrêter</button></div><p class="mu" style="margin-top:10px">Colle le code de liaison sur chaque autre appareil (téléphone, tablette, ordinateur) pour partager les mêmes données.</p>`:`<p class="mu" style="margin-top:10px">Seul MasterLog peut modifier la synchronisation.</p>`}`
+  :`<p class="mu">Relie cet appareil aux autres pour partager les mêmes données (comptes, classes, élèves, absences) partout dans le monde.</p>
+  <h3 style="margin:14px 0 6px;font-size:16px">Rejoindre avec un code de liaison</h3>
+  <input id="syj" placeholder="Colle ici le code de liaison (GE1-…)" autocapitalize="none" autocomplete="off" style="width:100%;margin-bottom:10px">
+  <button style="width:100%" onclick="syJoin()">Rejoindre</button>
+  <h3 style="margin:18px 0 6px;font-size:16px">Premier appareil : configurer</h3>
+  <input id="syu" placeholder="Adresse Firebase Realtime Database (https://…)" autocapitalize="none" autocomplete="off" style="width:100%;margin-bottom:10px">
+  <input id="syr" placeholder="Code de synchronisation (12 caractères minimum)" autocapitalize="none" autocomplete="off" style="width:100%;margin-bottom:10px">
+  <div class="row"><button class="s" onclick="syGen()">Générer un code</button><button onclick="syForm()">Activer</button></div>
+  <p class="mu" style="margin-top:12px;font-size:12px">Règles à publier dans Firebase (onglet Règles) :<br><code style="word-break:break-all;user-select:all">{"rules":{".read":false,".write":false,"rooms":{"$room":{".read":true,".write":true,"e":{".indexOn":["t"]}}}}}</code></p>`}
+  </div></main>`}
+const esc=s=>String(s??'').replace(/[&<>"']/g,c=>({'&':'&amp;','<':'&lt;','>':'&gt;','"':'&quot;',"'":'&#39;'}[c]));
+
+/* ===== État ===== */
+let me=null,view={page:'home',tab:'eleves',cid:null,promo:null,sg:null,fs:'',fc:'',q:'',target:null},pending=null;
+const $=id=>document.getElementById(id);
+const userName=id=>(db.users.find(u=>u.id===id)||{}).name||'?';
+const ow=()=>me.role==='surv'?me.id:view.sg;
+function go(p,o={}){Object.assign(view,{page:p,cid:null,promo:null,sg:null,target:null},o);pending=null;render()}
+function sgList(){return db.users.filter(u=>u.role==='surv').map(u=>`<div class="cls" onclick="openSG('${u.id}')"><b>${esc(u.name)}</b><span><span class="mu">${db.classes.filter(c=>c.owner===u.id).length} classe(s)</span> <button class="s" onclick="event.stopPropagation();ren('${u.id}')">✏️</button></span></div>`).join('')}
+const pn=(o,k)=>((db.users.find(u=>u.id===o)||{}).promos||{})[k]||'Promo '+k;
+function renPromo(k){const u=db.users.find(x=>x.id===ow()),n=prompt('Nouveau nom de la promotion :',pn(u.id,k));if(n&&n.trim()){u.promos=u.promos||{};u.promos[k]=n.trim();save();render()}}
+const nz=t=>String(t).normalize('NFD').replace(/[\u0300-\u036f]/g,'').toLowerCase();
+function doSearch(v){
+  const q=nz(v.trim()),r=$('sr');
+  if(!q){r.innerHTML='';return}
+  const l=db.students.filter(s=>nz(s.name).includes(q)).slice(0,50);
+  r.innerHTML=l.map(s=>{const c=db.classes.find(x=>x.id===s.cid)||{};
+    return `<div class="cls" style="cursor:default;display:block"><b>${esc(s.name)}</b><div class="mu">Classe : ${esc(c.name||'?')} · ${esc(pn(c.owner,c.promo||'A'))} · ${esc(userName(c.owner))}</div></div>`}).join('')||'<p class="mu">Aucun élève trouvé.</p>';
+}
+function ren(id){const u=db.users.find(x=>x.id===id),n=prompt('Nouveau nom :',u.name);if(n&&n.trim()){u.name=n.trim();save();render()}}
+function openSG(id){if(me){view.sg=id;view.cid=null;view.promo=null;view.tab='sga';render()}else go('login',{target:id})}
+function addEyes(){
+  document.querySelectorAll('input[type=password]').forEach(i=>{
+    if(i.dataset.eye)return;i.dataset.eye=1;
+    const w=document.createElement('div');w.style.cssText='position:relative;width:100%';
+    i.parentNode.insertBefore(w,i);w.appendChild(i);
+    i.style.paddingRight='46px';
+    const b=document.createElement('button');b.type='button';b.textContent='👁️';b.title='Afficher / masquer le code';
+    b.style.cssText='position:absolute;right:2px;top:0;height:'+i.offsetHeight+'px;width:42px;padding:0;background:transparent;color:inherit;font-size:18px;border:0;cursor:pointer';
+    b.onclick=()=>{const h=i.type==='password';i.type=h?'text':'password';b.textContent=h?'🙈':'👁️'};
+    w.appendChild(b)})}
+function render(){document.body.classList.toggle('acct',!!me);render0();addEyes();addExtras();if(me&&view.page==='msg')msgPaint(1)}
+function render0(){
+  const a=$('app');
+  if(!me){
+    const bt=['login','forgot'].includes(view.page)&&db.users.find(x=>x.id===view.target);
+    if(bt&&bt.blocked)return a.innerHTML=`<div class="login card"><h2>${esc(bt.name)}</h2><p class="er"><b>🔒 Compte bloqué.</b></p><p class="mu">Contacte MasterLog pour le débloquer.</p><button class="s" style="width:100%" onclick="go('${bt.role==='surv'?'sga':'home'}')">Retour</button></div>`;
+    if(view.page==='sync')return a.innerHTML=syPage("go('home')");
+    if(view.page==='sga')return a.innerHTML=`<main><button class="s" onclick="go('home')">‹ Accueil</button><div class="card" style="margin-top:12px"><h2>Les SGA</h2>${sgList()}</div></main>`;
+    if(view.page==='search')return a.innerHTML=`<main><button class="s" onclick="go('home')">‹ Accueil</button><div class="card" style="margin-top:12px"><h2>🔍 Recherche d'un élève</h2><input id="sq" placeholder="Écris le nom de l'élève…" style="width:100%" oninput="doSearch(this.value)" autofocus><div id="sr" style="margin-top:12px"></div></div></main>`;
+    if(view.page==='forgot'){const u=db.users.find(x=>x.id===view.target);
+      return a.innerHTML=`<div class="login card"><h2>Code oublié : ${esc(u.name)}</h2>${u.role==='master'?(1?`<input id="g1" type="password" autocomplete="off" autocapitalize="none"><input id="g2" type="password" autocomplete="off" autocapitalize="none"><input id="nc" type="password" placeholder="Nouveau code (minimum 4 chiffres et/ou lettres)"><input id="nc2" type="password" placeholder="Confirme le nouveau code"><button style="width:100%" onclick="resetCode()">Réinitialiser mon code</button>`:''):`<p class="mu">Pour récupérer ton code, envoie un message à MasterLog. Il va réinitialiser ton code, puis tu pourras en créer un nouveau à ta prochaine connexion.</p><button class="wa" style="width:100%" onclick="askReset('wa')">📩 Envoyer à MasterLog (WhatsApp)</button><button class="s sm" style="width:100%;margin-top:8px" onclick="askReset('sms')">✉️ Envoyer à MasterLog (SMS)</button>`}<button class="s" style="width:100%;margin-top:8px" onclick="go('login',{target:'${u.id}'})">Retour</button></div>`}
+    if(view.page==='login'){const u=db.users.find(x=>x.id===view.target);
+      if(!u.pass)return a.innerHTML=`<div class="login card"><h2>${esc(u.name)}</h2><p class="mu">Première connexion : crée ton code personnel (minimum 4 chiffres et/ou lettres).</p>
+      <input id="nc" type="password" placeholder="Ton code (minimum 4 caractères)"><input id="nc2" type="password" placeholder="Confirme ton code">
+      <button style="width:100%" onclick="setupCode()">Créer mon code</button><button class="s" style="width:100%;margin-top:8px" onclick="go('${u.role==='surv'?'sga':'home'}')">Retour</button></div>`;
+      return a.innerHTML=`<div class="login card"><h2>${esc(u.name)}</h2><input id="lg" value="${esc(u.login)}" autocapitalize="none"><input id="pw" type="password" placeholder="Mot de passe"><button style="width:100%" onclick="login()">Se connecter</button><button class="s" style="width:100%;margin-top:8px" onclick="go('forgot',{target:'${u.id}'})">Code oublié ?</button><button class="s" style="width:100%;margin-top:8px" onclick="go('${u.role==='surv'?'sga':'home'}')">Retour</button></div>`}
+    return a.innerHTML=`<div id="home" class="login card" style="max-width:560px;padding:12px 18px;margin-top:1.5vh;margin-bottom:1.5vh"><div style="font-size:26px;font-weight:800;letter-spacing:1px;color:var(--pr);margin:2px 0">CEG1 ALLADA</div>
+    <h2 style="text-align:center;font-size:19px;font-weight:600;color:var(--mu);margin-bottom:12px">📚 Gestion des élèves</h2>
+    <button class="hb" onclick="go('login',{target:'de'})">Le Directeur</button>
+    <button class="hb" onclick="go('login',{target:'cens'})">Le Censeur/Comptable</button>
+    <button class="hb" onclick="go('login',{target:'sup'})">Superviseur (Le SG)</button>
+    <button class="hb" onclick="go('sga')">Les SGA</button>
+    <button class="hb alt" onclick="go('search')">🔍 Recherche d'un élève</button>
+    <span class="mlw"><button class="ml" aria-label="MasterLog" onclick="go('login',{target:'master'})">MasterLog</button></span>
+    <div id="zone" style="min-height:0"></div>
+    <div class="pub"><div class="pub-t"><span class="pub-i">✨</span> CONCEPTEUR &amp; CONSTRUCTEUR</div><div class="pub-n">MODESTE AMIKPÉMI</div><p class="pub-d">Ingénierie de logiciels sur-mesure &amp; applications sécurisées.</p><a class="pub-w" href="https://wa.me/2290195185256" target="_blank" rel="noopener">💬 WhatsApp : +229 01 95 18 52 56</a></div></div>`;
+  }
+  const hd=`<header><b>📚 ${esc(me.name)}</b><span><button class="s mg" onclick="go('msg')" title="Messagerie">💬<span class="mbd" style="display:${msgTotal()?'inline-block':'none'}">${msgTotal()||''}</span></button> <button class="s" onclick="go('mycode')">🔑 Mon code</button> <button class="s" onclick="logout()">Déconnexion</button></span></header>`;
+  if(view.page==='msg')return a.innerHTML=hd+msgPage();
+  if(view.page==='sync')return a.innerHTML=hd+syPage("go('app')");
+  if(view.page==='mycode')return a.innerHTML=hd+`<main><div class="card" style="max-width:420px"><h2>Mon code</h2>
+  <input id="oc" type="password" placeholder="Code actuel" style="width:100%;margin-bottom:10px">
+  <input id="nc" type="password" placeholder="Nouveau code, minimum 4 chiffres/lettres (vide = inchangé)" style="width:100%;margin-bottom:10px">
+  <input id="nc2" type="password" placeholder="Confirmer le nouveau code" style="width:100%;margin-bottom:10px">
+  
+
+  <div class="row"><button onclick="saveCode()">Enregistrer</button><button class="s" onclick="go('app')">Annuler</button></div></div></main>`;
+  a.innerHTML=hd+`<main id="m"></main>`;
+  me.role==='surv'?renderSurv():renderSup();
+}
+function gm(a,b){const l=[a,b].map(x=>String(x||'').trim().toLowerCase());
+  if(!l.every(x=>/^[a-z0-9._%+-]+@gmail\.com$/.test(x)))return{err:'Informations incorrectes'};
+  if(l[0]===l[1])return{err:'Informations incorrectes'};
+  return{l:l.sort()}}
+async function setupCode(){
+  const c=$('nc').value,u=db.users.find(x=>x.id===view.target);
+  if(u.blocked)return alert('Compte bloqué. Contacte MasterLog.');
+  if(!okCode(c))return alert('Le code doit contenir au minimum 4 chiffres et/ou lettres');
+  if(c!==$('nc2').value)return alert('Les deux codes ne correspondent pas');
+  u.pass=c;u.pcAt=Date.now();u.fails=0;db.reqs=(db.reqs||[]).filter(r=>r.u!==u.id);save();if(!(await claimSession(u)))return;me=u;Object.assign(view,{page:'app',tab:'eleves',cid:null,promo:null,sg:null,fs:'',fc:'',q:''});render()}
+function saveCode(){
+  if($('oc').value!==me.pass)return alert('Code actuel incorrect');
+  const n=$('nc').value;
+  if(n){if(!okCode(n))return alert('Le code doit contenir au minimum 4 chiffres et/ou lettres');if(n!==$('nc2').value)return alert('Les deux codes ne correspondent pas');me.pass=n;me.pcAt=Date.now()}
+  save();alert('Enregistré');go('app')}
+function resetCode(){
+  const u=db.users.find(x=>x.id===view.target),n=$('nc').value;
+  if(u.blocked)return alert('Compte bloqué. Contacte MasterLog.');
+  if(u.role==='master'){
+    const m=gm($('g1').value,$('g2').value);
+    if(m.err||hs('amideste|'+m.l.join('|'))!==MASTER_MAILS_H)return alert('Informations incorrectes');
+    if(!okCode(n))return alert('Le code doit contenir au minimum 4 chiffres et/ou lettres');
+    if(n!==$('nc2').value)return alert('Les deux codes ne correspondent pas');
+    u.pass=n;u.pcAt=Date.now();u.fails=0;delete u.locked;save();alert('Code réinitialisé. Tu peux te connecter.');return go('login',{target:u.id})}
+  return alert('Contacte MasterLog pour réinitialiser ton code.')}
+function askReset(k){
+  const u=db.users.find(x=>x.id===view.target);if(!u||u.blocked)return;
+  db.reqs=(db.reqs||[]).filter(r=>r.u!==u.id);db.reqs.push({u:u.id,t:Date.now()});save();
+  const txt='CEG1 ALLADA - Gestion des élèves : '+u.name+' (identifiant : '+u.login+') a oublié son code. Merci de le réinitialiser.';
+  if(k==='sms')location.href='sms:+229'+MASTER_TEL+'?body='+encodeURIComponent(txt);
+  else window.open('https://wa.me/229'+MASTER_TEL+'?text='+encodeURIComponent(txt),'_blank');
+  alert('Demande enregistrée pour MasterLog. Si le message ne s\'est pas ouvert, appelle MasterLog au '+MASTER_TEL+'.')}
+
+
+async function login(){
+  const u=db.users.find(x=>x.id===view.target);
+  if(u&&u.blocked)return alert('Compte bloqué. Contacte MasterLog.');
+  if(u&&u.locked)return alert('Compte verrouillé après 3 tentatives. Utilise « Code oublié ? ».');
+  if(!u||u.login!==$('lg').value.trim().toLowerCase()||u.pass!==$('pw').value){
+    if(!u)return alert('Identifiant ou mot de passe incorrect');
+    u.fails=(u.fails||0)+1;
+    if(u.fails>=3){
+      if(u.role==='master'){u.locked=1;save();alert('Compte verrouillé après 3 tentatives. Utilise « Code oublié ? ».');return render()}
+      u.blocked=1;u.auto=1;db.reqs=(db.reqs||[]).filter(r=>r.u!==u.id);db.reqs.push({u:u.id,t:Date.now(),lock:1});save();
+      alert('Compte bloqué après 3 tentatives. Contacte MasterLog.');return render()}
+    save();return alert('Identifiant ou mot de passe incorrect. Il te reste '+(3-u.fails)+' essai(s).')}
+  u.fails=0;save();
+  if(!(await claimSession(u)))return;
+  me=u;Object.assign(view,{page:'app',tab:'eleves',cid:null,promo:null,sg:null,fs:'',fc:'',q:''});render();
+}
+
+/* ===== Surveillant ===== */
+function renderSurv(){
+  const m=$('m');
+  if(!view.promo){
+    m.innerHTML=`${me.role!=='surv'?'<button class="s" style="margin-bottom:12px" onclick="view.sg=null;render()">‹ Les SGA</button>':''}<div class="card"><h2>${esc(userName(ow()))}</h2>
+    ${['A','B','C'].map(k=>`<div class="cls" onclick="view.promo='${k}';render()"><b>${esc(pn(ow(),k))}</b><span><span class="mu">${db.classes.filter(c=>c.owner===ow()&&(c.promo||'A')===k).length} classe(s) ›</span> <button class="s" onclick="event.stopPropagation();renPromo('${k}')">✏️</button></span></div>`).join('')}</div>`;
+    return;
+  }
+  if(!view.cid){
+    const cl=db.classes.filter(c=>c.owner===ow()&&(c.promo||'A')===view.promo);
+    m.innerHTML=`<button class="s" style="margin-bottom:12px" onclick="view.promo=null;render()">‹ ${esc(userName(ow()))}</button><div class="card"><h2>${esc(pn(ow(),view.promo))} · classes</h2>
+    <div class="row"><input id="cn" placeholder="Nom de la classe (ex : 6e A)"><button onclick="addClass()">+ Créer</button></div>
+    ${cl.map(c=>`<div class="cls" onclick="view.cid='${c.id}';render()"><b>${esc(c.name)}</b><span class="mu">${db.students.filter(s=>s.cid===c.id).length} élève(s) ›</span></div>`).join('')||'<p class="mu">Aucune classe pour le moment.</p>'}</div>`;
+    return;
+  }
+  const c=db.classes.find(x=>x.id===view.cid),st=db.students.filter(s=>s.cid===c.id);
+  m.innerHTML=`<button class="s" onclick="view.cid=null;pending=null;render()">‹ Retour</button>
+  <div class="card" style="margin-top:12px"><h2>${esc(c.name)} <span class="mu">(${st.length})</span></h2>
+  <div class="row"><input id="n" placeholder="Nom complet"><select id="sx"><option value="M">Garçon</option><option value="F">Fille</option></select>
+  <input id="t" type="tel" placeholder="Téléphone des parents"><button onclick="addStu()">+ Ajouter</button></div>
+  <div class="row"><label class="btn s" style="border:1px solid var(--bd);color:var(--pr);background:none">📥 Importer Excel / Word<input type="file" hidden accept=".xlsx,.xls,.csv,.docx" onchange="importFile(this.files[0])"></label>
+  <button class="s" onclick="tpl()">Modèle Excel</button>
+  <button class="d" onclick="delClass('${c.id}')">Supprimer la classe</button></div>
+  <div id="prev"></div></div>
+  ${absCard(st)}`;
+  if(pending)showPrev();
+}
+function addClass(){const n=$('cn').value.trim();if(!n)return;
+  if(db.classes.some(c=>c.owner===ow()&&(c.promo||'A')===view.promo&&c.name.toLowerCase()===n.toLowerCase()))return alert('Cette classe existe déjà');
+  db.classes.push({id:uid(),owner:ow(),promo:view.promo,name:n});save();render()}
+function delClass(id){if(!confirm('Supprimer cette classe et tous ses élèves ?'))return;
+  db.classes=db.classes.filter(c=>c.id!==id);db.students=db.students.filter(s=>s.cid!==id);view.cid=null;save();render()}
+function addStu(){
+  const r=check($('n').value,$('sx').value,$('t').value,view.cid);
+  if(r.err)return alert(r.err);
+  db.students.push({id:uid(),cid:view.cid,name:r.name,sex:r.sex,phone:r.phone});save();render()}
+function delStu(id){db.students=db.students.filter(s=>s.id!==id);save();render()}
+
+/* ===== Présence / Absence ===== */
+const fmtD=d=>d.getFullYear()+'-'+String(d.getMonth()+1).padStart(2,'0')+'-'+String(d.getDate()).padStart(2,'0');
+const today=()=>fmtD(new Date());
+const frD=t=>new Date(t+'T12:00:00').toLocaleDateString('fr-FR',{weekday:'short',day:'2-digit',month:'2-digit',year:'numeric'});
+function setDate(v){if(v&&v<=today()){view.date=v;render()}}
+function shiftDate(n){const d=new Date((view.date||today())+'T12:00:00');d.setDate(d.getDate()+n);setDate(fmtD(d))}
+function toggleAb(sid,k){
+  const day=db.abs[view.date]=db.abs[view.date]||{},r=day[sid]=day[sid]||{};
+  r[k]=!r[k];if(!r.m&&!r.s)delete day[sid];
+  save();const y=scrollY;render();scrollTo(0,y)}
+function absCard(st){
+  view.date=view.date||today();const day=db.abs[view.date]||{},n=st.filter(s=>day[s.id]).length;
+  return `<div class="card"><h2>Élèves de la classe · Présence / Absence</h2>
+  <div class="row"><button class="s" onclick="shiftDate(-1)">◀</button><input type="date" value="${view.date}" max="${today()}" onchange="setDate(this.value)"><button class="s" onclick="shiftDate(1)" ${view.date>=today()?'disabled':''}>▶</button><span class="mu">${n} absent(s) sur ${st.length}</span></div>
+  <p class="mu">Rien de coché = présent ce jour. Utilise ◀ ou la date pour revenir à un jour précédent.</p>
+  ${pdfPanel(view.cid)}
+  <div class="wrap"><table><tr><th>N°</th><th>Nom complet</th><th>Sexe</th><th>Téléphone parents</th><th>Matin</th><th>Soir</th><th></th></tr>
+  ${st.map((s,i)=>{const r=day[s.id]||{};return `<tr${r.m||r.s?' style="background:rgba(192,80,74,.09)"':''}><td class="mu">${i+1}</td><td>${esc(s.name)}</td><td>${s.sex==='M'?'Garçon':'Fille'}</td><td>${esc(s.phone)}</td>
+  <td><button class="ab am ${r.m?'on':''}" onclick="toggleAb('${s.id}','m')">Ab matin</button></td>
+  <td><button class="ab as ${r.s?'on':''}" onclick="toggleAb('${s.id}','s')">Ab soir</button></td>
+  <td><button class="d" onclick="delStu('${s.id}')">✕</button></td></tr>`}).join('')||'<tr><td colspan="7" class="mu">Aucun élève.</td></tr>'}</table></div></div>`}
+
+/* ===== Export PDF des absents ===== */
+const pdfPanel=cid=>`<div class="row" style="margin-top:10px;padding-top:10px;border-top:1px solid var(--bd)"><b>📄 PDF des absents</b>
+<select id="pp"><option value="j">Par jour</option><option value="s">Par semaine</option><option value="m">Par mois</option><option value="p">Période définie</option></select>
+<input type="date" id="pd" value="${view.date||today()}" max="${today()}" title="Date de référence">
+<span class="mu">Période :</span><input type="date" id="d1"><input type="date" id="d2">
+<button onclick="exportPdf('${cid||''}')">Télécharger</button></div>
+<p class="mu">Jour, semaine et mois sont calculés à partir de la date de référence. « Période définie » utilise les champs du / au.</p>`;
+function pdfRange(){
+  const t=$('pp').value,ref=$('pd').value||today(),d=new Date(ref+'T12:00:00');
+  if(t==='j')return[ref,ref,'Jour : '+frD(ref)];
+  if(t==='s'){const a=new Date(d);a.setDate(d.getDate()-(d.getDay()+6)%7);const b=new Date(a);b.setDate(a.getDate()+6);return[fmtD(a),fmtD(b),'Semaine du '+frD(fmtD(a))+' au '+frD(fmtD(b))]}
+  if(t==='m'){const a=fmtD(new Date(d.getFullYear(),d.getMonth(),1)),b=fmtD(new Date(d.getFullYear(),d.getMonth()+1,0));return[a,b,'Mois : '+d.toLocaleDateString('fr-FR',{month:'long',year:'numeric'})]}
+  const a=$('d1').value,b=$('d2').value;
+  return[a,b,'Du '+(a?frD(a):'?')+' au '+(b?frD(b):'?')]}
+function exportPdf(cid){
+  if(!window.jspdf)return alert('Module PDF non chargé. Vérifie ta connexion internet.');
+  const [a,b,label]=pdfRange();
+  if(!a||!b||a>b)return alert('Choisis une période valide (date de début avant la date de fin).');
+  const agg={};
+  Object.keys(db.abs).filter(d=>d>=a&&d<=b).forEach(d=>{
+    Object.entries(db.abs[d]).forEach(([sid,r])=>{
+      const st=db.students.find(x=>x.id===sid);if(!st)return;
+      const c=db.classes.find(x=>x.id===st.cid);if(!c)return;
+      if(cid?c.id!==cid:((view.fs&&c.owner!==view.fs)||(view.fc&&c.id!==view.fc)))return;
+      const o=agg[sid]=agg[sid]||{st,c,n:0};
+      o.n+=(r.m?1:0)+(r.s?1:0)})});
+  const list=Object.values(agg).sort((x,y)=>x.c.name.localeCompare(y.c.name,'fr')||x.st.name.localeCompare(y.st.name,'fr'));
+  if(!list.length)return alert('Aucune absence sur cette période.');
+  const rows=list.map(o=>[o.st.name,o.st.sex==='M'?'M':'F',o.c.name,label,o.n,o.st.phone,'','']);
+  const doc=new window.jspdf.jsPDF({orientation:'landscape'});
+  const cl=cid?db.classes.find(x=>x.id===cid):null;
+  doc.setFontSize(15);doc.text('CEG1 ALLADA - Liste des absents'+(cl?' - Classe : '+cl.name:''),14,16);
+  doc.setFontSize(10);doc.text(label,14,23);
+  doc.text(rows.length+' élève(s) absent(s)',14,29);
+  doc.autoTable({startY:34,
+    head:[['Nom complet','Sexe','Classe','Période','Nbre de demi-journées d\'absence','N° Tél parent','Motif de l\'absence','Observation']],
+    body:rows,
+    styles:{fontSize:9,cellPadding:2.5,valign:'middle',lineColor:[150,150,150],lineWidth:.1,minCellHeight:10},
+    headStyles:{fillColor:[36,87,214],halign:'center'},
+    columnStyles:{0:{cellWidth:50},1:{cellWidth:13,halign:'center'},2:{cellWidth:24},3:{cellWidth:50},4:{cellWidth:28,halign:'center'},5:{cellWidth:32},6:{cellWidth:36},7:{cellWidth:36}}});
+  doc.save('absents_'+(cl?cl.name.replace(/\s+/g,'_')+'_':'')+a+'_'+b+'.pdf')}
+
+/* ===== Validation et import ===== */
+function normSex(v){const s=String(v||'').trim().toLowerCase();
+  if(/^(m|g|h)/.test(s))return'M'; if(/^f/.test(s))return'F'; return null}
+function check(name,sex,phone,cid,batch=[]){
+  name=String(name||'').trim().replace(/\s+/g,' ');phone=String(phone||'').trim();sex=normSex(sex);
+  if(!name)return{err:'Nom manquant'};
+  if(!sex)return{err:'Sexe invalide (M/F)'};
+  if(phone.replace(/\D/g,'').length<6)return{err:'Téléphone manquant ou invalide'};
+  const k=name.toLowerCase()+'|'+phone.replace(/\D/g,'');
+  const dup=x=>x.name.toLowerCase()+'|'+x.phone.replace(/\D/g,'')===k;
+  if(db.students.some(s=>s.cid===cid&&dup(s))||batch.some(dup))return{err:'Doublon'};
+  return{name,sex,phone};
+}
+async function importFile(f){
+  if(!f)return;let rows=[];
+  try{
+    const buf=await f.arrayBuffer();
+    if(/\.docx$/i.test(f.name)){
+      const h=(await mammoth.convertToHtml({arrayBuffer:buf})).value;
+      const d=new DOMParser().parseFromString(h,'text/html');
+      d.querySelectorAll('tr').forEach(tr=>rows.push([...tr.children].map(td=>td.textContent.trim())));
+    }else{
+      const wb=XLSX.read(buf,{type:'array'});
+      rows=XLSX.utils.sheet_to_json(wb.Sheets[wb.SheetNames[0]],{header:1,raw:false,defval:''});
+    }
+  }catch(e){return alert('Fichier illisible : '+e.message)}
+  rows=rows.filter(r=>r.some(x=>String(x).trim()));
+  if(rows.length&&/nom/i.test(rows[0][0]))rows.shift();
+  const batch=[];pending=rows.map(r=>{
+    const x=check(r[0],r[1],r[2],view.cid,batch);
+    if(!x.err)batch.push(x);
+    return{raw:r,x}});
+  render();
+}
+function showPrev(){
+  const ok=pending.filter(p=>!p.x.err).length,bad=pending.length-ok;
+  $('prev').innerHTML=`<h2>Aperçu de l'import</h2><p><span class="ok">${ok} valide(s)</span> · <span class="er">${bad} ligne(s) ignorée(s)</span></p>
+  <div class="wrap" style="max-height:260px;overflow:auto"><table>${pending.map(p=>`<tr><td>${esc(p.raw[0])}</td><td>${esc(p.raw[1])}</td><td>${esc(p.raw[2])}</td><td class="${p.x.err?'er':'ok'}">${p.x.err||'OK'}</td></tr>`).join('')}</table></div>
+  <div class="row" style="margin-top:10px"><button onclick="confirmImp()" ${ok?'':'disabled'}>Importer les ${ok} valides</button><button class="s" onclick="pending=null;render()">Annuler</button></div>`}
+function confirmImp(){pending.filter(p=>!p.x.err).forEach(p=>db.students.push({id:uid(),cid:view.cid,...p.x}));pending=null;save();render()}
+function tpl(){const ws=XLSX.utils.aoa_to_sheet([['Nom complet','Sexe','Téléphone des parents'],['Awa Diallo','F','0612345678'],['Moussa Traoré','M','0698765432']]);
+  const wb=XLSX.utils.book_new();XLSX.utils.book_append_sheet(wb,ws,'Élèves');XLSX.writeFile(wb,'modele-import-eleves.xlsx')}
+
+/* ===== Superviseur ===== */
+function renderSup(){
+  if(view.tab==='sga'&&view.sg)return renderSurv();
+  const m=$('m'),sv=db.users.filter(u=>u.role==='surv');
+  m.innerHTML=`<div class="tabs"><button class="${view.tab==='eleves'?'on':'s'}" onclick="view.tab='eleves';render()">Tous les élèves</button>
+  <button class="${view.tab==='sga'?'on':'s'}" onclick="view.tab='sga';view.sg=null;render()">Les SGA</button>${me.role==='sup'||me.role==='master'?`<button class="${view.tab==='comptes'?'on':'s'}" onclick="view.tab='comptes';render()">Comptes${me.role==='master'&&(db.reqs||[]).length?' 🔔'+db.reqs.length:''}</button>`:''}${me.role==='master'?`<button class="${view.tab==='outils'?'on':'s'}" onclick="view.tab='outils';view.fs='';view.fc='';render()">Outils</button>`:''}</div><div id="sb"></div>`;
+  if(view.tab==='sga'){$('sb').innerHTML=`<div class="card"><h2>Les SGA</h2>${sgList()}</div>`;return}
+  if(view.tab==='comptes'&&(me.role==='sup'||me.role==='master')){
+    const ms=me.role==='master',us=db.users.filter(u=>u.role!=='master'),rq=db.reqs||[],rqOf=id=>rq.find(r=>r.u===id);
+    $('sb').innerHTML=`<div class="card wrap"><h2>Comptes</h2>${ms&&rq.length?`<p class="er"><b>🔔 ${rq.length} compte(s) à traiter (code oublié ou bloqué)</b></p>`:''}<p class="mu">Un mot de passe vide oblige la personne à recréer son code à sa prochaine connexion.${ms?' « Réinitialiser le code » vide le code : la personne en crée un nouveau à sa prochaine connexion. Tu peux aussi saisir toi-même un nouveau code dans la colonne « Mot de passe ». « Bloquer » empêche toute connexion.':''}</p><table><tr><th>Nom</th><th>Identifiant</th><th>Mot de passe</th>${ms?'<th>Statut</th><th>Code modifié le</th><th></th>':''}</tr>
+    ${us.map(u=>`<tr><td><input value="${esc(u.name)}" onchange="upU('${u.id}','name',this.value)"></td><td><input value="${esc(u.login)}" onchange="upU('${u.id}','login',this.value.trim().toLowerCase())"></td><td><input value="${esc(u.pass)}" onchange="upU('${u.id}','pass',this.value)"></td>${ms?`<td class="${u.blocked?'er':'ok'}"><b>${u.blocked?(u.auto?'Bloqué (3 essais)':'Bloqué'):'Actif'}</b>${rqOf(u.id)?` <span class="er">🔔 ${rqOf(u.id).lock?'Bloqué après 3 essais':'Code oublié'} · ${new Date(rqOf(u.id).t).toLocaleString('fr-FR',{dateStyle:'short',timeStyle:'short'})}</span>`:''}</td><td class="mu">${u.pcAt?new Date(u.pcAt).toLocaleString('fr-FR',{dateStyle:'short',timeStyle:'short'}):'—'}</td><td><button class="s" onclick="resetU('${u.id}')">Réinitialiser le code</button> <button class="${u.blocked?'':'d'}" onclick="blockU('${u.id}')">${u.blocked?'Débloquer':'Bloquer'}</button></td>`:''}</tr>`).join('')}</table></div>`;
+    return;
+  }
+  if(view.tab==='outils'&&me.role==='master'){
+    $('sb').innerHTML=`<div class="card"><h2>Télécharger / Sauvegarder</h2>
+    <div class="row"><button onclick="exportAll()">📦 Toutes les listes (Excel)</button><button class="s" onclick="backup()">💾 Sauvegarde complète (JSON)</button>
+    <label class="btn s" style="border:1px solid var(--bd);color:var(--pr);background:none">♻️ Restaurer une sauvegarde<input type="file" hidden accept=".json" onchange="restore(this.files[0])"></label></div>
+    <p class="mu">Le fichier Excel contient tous les élèves, une feuille par classe et les absences. La sauvegarde JSON contient tout (comptes et codes compris) : garde-la en lieu sûr.</p>${pdfPanel('')}</div>`;
+    return;
+  }
+  const cls=db.classes.filter(c=>!view.fs||c.owner===view.fs);
+  const q=view.q.toLowerCase();
+  const list=filtered();
+  $('sb').innerHTML=`<div class="card"><div class="row">
+  <select onchange="view.fs=this.value;view.fc='';render()"><option value="">Tous les surveillants</option>${sv.map(u=>`<option value="${u.id}" ${view.fs===u.id?'selected':''}>${esc(u.name)}</option>`).join('')}</select>
+  <select onchange="view.fc=this.value;render()"><option value="">Toutes les classes</option>${cls.map(c=>`<option value="${c.id}" ${view.fc===c.id?'selected':''}>${esc(c.name)} · ${esc(pn(c.owner,c.promo||'A'))} (${esc(userName(c.owner))})</option>`).join('')}</select>
+  <input id="q" placeholder="Rechercher…" value="${esc(view.q)}" oninput="view.q=this.value;renderRows()"></div>
+  <div class="row"><span class="mu" id="cnt"></span><button class="s" onclick="exportX()">📤 Exporter en Excel</button></div>
+  ${pdfPanel('')}
+  <div class="wrap"><table id="tb"></table></div></div>`;
+  renderRows();
+}
+function filtered(){const q=view.q.toLowerCase();
+  return db.students.map(s=>{const c=db.classes.find(c=>c.id===s.cid);return{...s,cls:c?c.name+' ('+pn(c.owner,c.promo||'A')+')':'?',owner:c?c.owner:null}})
+  .filter(s=>(!view.fs||s.owner===view.fs)&&(!view.fc||s.cid===view.fc)&&(!q||s.name.toLowerCase().includes(q)||s.phone.includes(q)))}
+function renderRows(){const l=filtered();
+  $('cnt').textContent=l.length+' élève(s)';
+  $('tb').innerHTML=`<tr><th>Surveillant</th><th>Classe</th><th>Nom complet</th><th>Sexe</th><th>Téléphone parents</th></tr>`+
+  (l.map(s=>`<tr><td>${esc(userName(s.owner))}</td><td>${esc(s.cls)}</td><td>${esc(s.name)}</td><td>${s.sex==='M'?'Garçon':'Fille'}</td><td>${esc(s.phone)}</td></tr>`).join('')||'<tr><td colspan="5" class="mu">Aucun élève.</td></tr>')}
+function resetU(id){const u=db.users.find(x=>x.id===id);if(!u||!confirm('Réinitialiser le code de '+u.name+' ? Il devra en créer un nouveau à sa prochaine connexion.'))return;u.pass='';u.fails=0;if(u.auto){u.blocked=false;delete u.auto}db.reqs=(db.reqs||[]).filter(r=>r.u!==id);save();render()}
+function blockU(id){const u=db.users.find(x=>x.id===id);if(!u)return;if(!u.blocked&&!confirm('Bloquer le compte de '+u.name+' ?'))return;u.blocked=!u.blocked;u.fails=0;delete u.auto;db.reqs=(db.reqs||[]).filter(r=>r.u!==id);save();render()}
+function dl(blob,name){const a=document.createElement('a');a.href=URL.createObjectURL(blob);a.download=name;document.body.appendChild(a);a.click();a.remove();setTimeout(()=>URL.revokeObjectURL(a.href),2000)}
+function backup(){dl(new Blob([JSON.stringify(db)],{type:'application/json'}),'sauvegarde_gestion_eleves_'+today()+'.json')}
+function restore(f){
+  if(!f)return;const r=new FileReader();
+  r.onload=()=>{try{
+    const o=JSON.parse(r.result);
+    if(!Array.isArray(o.users)||!Array.isArray(o.classes)||!Array.isArray(o.students))throw 0;
+    if(!confirm('Remplacer toutes les données actuelles par cette sauvegarde ?'))return;
+    o.abs=o.abs||{};o.v3=1;
+    if(!o.users.some(u=>u.id==='master'))o.users.push(db.users.find(u=>u.id==='master'));
+    db=o;save();me=db.users.find(u=>u.id===me.id)||null;view.fs='';view.fc='';alert('Sauvegarde restaurée.');me?render():go('home');
+  }catch(e){alert('Fichier de sauvegarde invalide')}};
+  r.readAsText(f)}
+function exportAll(){
+  if(!window.XLSX)return alert('Module Excel non chargé. Vérifie ta connexion internet.');
+  const wb=XLSX.utils.book_new(),used={'tous les élèves':1,'absences':1};
+  const sn=n=>{const b=n.replace(/[\\\/\?\*\[\]:]/g,' ').slice(0,27).trim()||'Classe';let k=b,i=2;while(used[k.toLowerCase()])k=b.slice(0,25)+' '+i++;used[k.toLowerCase()]=1;return k};
+  const cls=db.classes.slice().sort((x,y)=>userName(x.owner).localeCompare(userName(y.owner),'fr')||(x.promo||'A').localeCompare(y.promo||'A')||x.name.localeCompare(y.name,'fr'));
+  const all=[['SGA','Promotion','Classe','Nom complet','Sexe','Téléphone des parents']],sheets=[];
+  cls.forEach(c=>{
+    const st=db.students.filter(s=>s.cid===c.id);
+    st.forEach(s=>all.push([userName(c.owner),pn(c.owner,c.promo||'A'),c.name,s.name,s.sex==='M'?'Garçon':'Fille',s.phone]));
+    sheets.push([sn(userName(c.owner).replace(/^SG\s*/,'')+' - '+c.name),[['Nom complet','Sexe','Téléphone des parents'],...st.map(s=>[s.name,s.sex==='M'?'Garçon':'Fille',s.phone])]])});
+  XLSX.utils.book_append_sheet(wb,XLSX.utils.aoa_to_sheet(all),'Tous les élèves');
+  sheets.forEach(([n,r])=>XLSX.utils.book_append_sheet(wb,XLSX.utils.aoa_to_sheet(r),n));
+  const ab=[['Date','Nom complet','Classe','Promotion','SGA','Matin','Soir']];
+  Object.keys(db.abs).sort().forEach(d=>Object.entries(db.abs[d]).forEach(([sid,r])=>{
+    const st=db.students.find(x=>x.id===sid),c=st&&db.classes.find(x=>x.id===st.cid);if(!c)return;
+    ab.push([d,st.name,c.name,pn(c.owner,c.promo||'A'),userName(c.owner),r.m?'Absent':'',r.s?'Absent':''])}));
+  XLSX.utils.book_append_sheet(wb,XLSX.utils.aoa_to_sheet(ab),'Absences');
+  XLSX.writeFile(wb,'toutes_les_listes_'+today()+'.xlsx')}
+
+/* ===== Gestion avancée des présences (ajouts) ===== */
+const MOTIFS=['Maladie','Événement familial','Autorisation','Autre motif justifié','Sans motif'];
+const ex=()=>db.ext=db.ext||{};
+const exd=(d,id)=>(ex()[d]||{})[id]||{};
+const keep=f=>{const y=scrollY;f();render();scrollTo(0,y)};
+function exSet(id,k,v){const e=ex(),d=view.date;e[d]=e[d]||{};const r=e[d][id]=e[d][id]||{};
+  if(!v)delete r[k];else r[k]=v;if(!Object.keys(r).length)delete e[d][id];if(!Object.keys(e[d]).length)delete e[d];save()}
+function exTog(id,k){keep(()=>exSet(id,k,!exd(view.date,id)[k]))}
+function bulk(cid,k){
+  const st=db.students.filter(s=>s.cid===cid);if(!st.length)return;
+  if(!confirm(k?`Marquer les ${st.length} élèves absents (${k==='ms'?'journée entière':k==='m'?'matin':'soir'}) le ${frD(view.date)} ?`:`Marquer les ${st.length} élèves présents le ${frD(view.date)} ?`))return;
+  keep(()=>{const day=db.abs[view.date]=db.abs[view.date]||{};
+    st.forEach(s=>{if(!k)delete day[s.id];else{const r=day[s.id]=day[s.id]||{};if(k.includes('m'))r.m=true;if(k.includes('s'))r.s=true}});
+    if(!Object.keys(day).length)delete db.abs[view.date];save()})}
+function telN(p){let d=String(p||'').replace(/\D/g,'');if(d.startsWith('229'))return d;if(d.length===8)d='01'+d;return '229'+d}
+function parentMsg(id,k){
+  const s=db.students.find(x=>x.id===id),a=(db.abs[view.date]||{})[id];if(!s||!a)return;
+  const w=a.m&&a.s?'toute la journée':a.m?'le matin':'le soir';
+  const t=`CEG1 ALLADA : Bonjour, votre enfant ${s.name} est absent(e) ${w} le ${frD(view.date)}. Merci de nous contacter.`;
+  if(k==='sms')location.href='sms:+'+telN(s.phone)+'?body='+encodeURIComponent(t);
+  else window.open('https://wa.me/'+telN(s.phone)+'?text='+encodeURIComponent(t),'_blank')}
+function setSeuil(v){v=parseInt(v);if(v>0){db.set.seuil=v;save();render()}}
+function xPer(){const t=today(),d=new Date(t+'T12:00:00'),p=view.xp||'30';let a=new Date(d);
+  if(p==='all'){const k=Object.keys(db.abs).sort()[0];a=k?new Date(k+'T12:00:00'):d}else a.setDate(d.getDate()-(+p-1));
+  let n=0;for(let x=new Date(a);x<=d;x.setDate(x.getDate()+1)){const w=x.getDay();if(w>0&&w<6)n++}
+  return{a:fmtD(a),b:t,n}}
+function xCalc(list){const P=xPer(),R={};list.forEach(s=>R[s.id]={s,dj:0,ju:0,rt:0});
+  Object.keys(db.abs).filter(d=>d>=P.a&&d<=P.b).forEach(d=>Object.entries(db.abs[d]).forEach(([id,r])=>{
+    const o=R[id];if(!o)return;const n=(r.m?1:0)+(r.s?1:0),e=exd(d,id);o.dj+=n;if(e.mo&&e.mo!=='Sans motif')o.ju+=n}));
+  Object.keys(ex()).filter(d=>d>=P.a&&d<=P.b).forEach(d=>Object.entries(ex()[d]).forEach(([id,e])=>{if(R[id]&&e.rt)R[id].rt++}));
+  return{P,R:Object.values(R)}}
+const perSel=()=>`<select onchange="view.xp=this.value;render()">${[['7','7 derniers jours'],['30','30 derniers jours'],['90','90 derniers jours'],['all','Depuis le début']].map(([v,l])=>`<option value="${v}" ${(view.xp||'30')===v?'selected':''}>${l}</option>`).join('')}</select>`;
+const seuilV=()=>db.set.seuil||6;
+const taux=(dj,n)=>n?Math.max(0,Math.round(1000-1000*dj/n)/10):100;
+function xTools(c){
+  const w=new Date(view.date+'T12:00:00').getDay();
+  return `<div class="card"><h2>⚡ Outils rapides</h2><div class="row"><button class="s" onclick="bulk('${c.id}','')">✅ Tous présents</button><button class="s" onclick="bulk('${c.id}','m')">Tous absents matin</button><button class="s" onclick="bulk('${c.id}','s')">Tous absents soir</button><button class="s" onclick="bulk('${c.id}','ms')">Tous absents journée</button></div>
+  <p class="mu">Ces boutons s'appliquent à toute la classe pour le ${frD(view.date)}. Ensuite, corrige élève par élève ci-dessus.</p>${w===0||w===6?'<p class="er">Attention : ce jour est un week-end.</p>':''}</div>`}
+function xDetails(c){
+  const st=db.students.filter(s=>s.cid===c.id),day=db.abs[view.date]||{};
+  return `<div class="card"><h2>📝 Détails du jour · ${frD(view.date)}</h2><p class="mu">Retards pour les présents ; motif, observation et message aux parents pour les absents.</p>
+  <div class="wrap"><table><tr><th>Nom complet</th><th>Retard / Absence</th><th>Motif</th><th>Observation</th><th>Parents</th></tr>
+  ${st.map(s=>{const a=day[s.id],e=exd(view.date,s.id);
+    return `<tr><td>${esc(s.name)}</td>`+(a?`<td class="er"><b>${a.m&&a.s?'Journée':a.m?'Matin':'Soir'}</b></td>
+    <td><select onchange="exSet('${s.id}','mo',this.value);render()"><option value="">Non précisé</option>${MOTIFS.map(m=>`<option ${e.mo===m?'selected':''}>${m}</option>`).join('')}</select></td>
+    <td><input value="${esc(e.ob||'')}" placeholder="Observation" onchange="exSet('${s.id}','ob',this.value.trim())"></td>
+    <td><button class="s sm" onclick="parentMsg('${s.id}','sms')">💬 SMS</button> <button class="s wa" onclick="parentMsg('${s.id}','wa')">WhatsApp</button></td>`
+    :`<td><button class="ab ar ${e.rt?'on':''}" onclick="exTog('${s.id}','rt')">Retard</button></td><td></td><td></td><td></td>`)+'</tr>'}).join('')||'<tr><td colspan="5" class="mu">Aucun élève.</td></tr>'}</table></div></div>`}
+function xStats(c){
+  const{P,R}=xCalc(db.students.filter(s=>s.cid===c.id)),sv=seuilV(),tot=R.reduce((a,o)=>a+o.dj,0),poss=R.length*P.n*2;
+  R.sort((x,y)=>y.dj-x.dj||x.s.name.localeCompare(y.s.name,'fr'));
+  return `<div class="card"><h2>📊 Statistiques de la classe</h2>
+  <div class="row">${perSel()}<span class="mu">Seuil d'alerte :</span><input type="number" min="1" value="${sv}" style="width:80px" onchange="setSeuil(this.value)"><span class="mu">demi-journées</span></div>
+  <p><b>Présence de la classe : ${taux(tot,poss)} %</b> <span class="mu">· ${tot} demi-journée(s) d'absence sur ${poss} possibles (${P.n} jours, lundi au vendredi)</span></p>
+  <div class="wrap"><table><tr><th>Nom complet</th><th>Demi-journées</th><th>Justifiées</th><th>Retards</th><th>Présence</th><th></th></tr>
+  ${R.map(o=>`<tr><td>${esc(o.s.name)}</td><td>${o.dj}</td><td>${o.ju}</td><td>${o.rt}</td><td>${taux(o.dj,P.n*2)} %</td><td class="er">${o.dj>=sv?'⚠️ À surveiller':''}</td></tr>`).join('')||'<tr><td colspan="6" class="mu">Aucun élève.</td></tr>'}</table></div></div>`}
+function xDash(){
+  const rows=db.classes.map(c=>{const{P,R}=xCalc(db.students.filter(s=>s.cid===c.id));const dj=R.reduce((a,o)=>a+o.dj,0);
+    return{c,n:R.length,dj,al:R.filter(o=>o.dj>=seuilV()).length,t:taux(dj,R.length*P.n*2)}}).sort((a,b)=>a.t-b.t);
+  const N=rows.reduce((a,r)=>a+r.n,0),D=rows.reduce((a,r)=>a+r.dj,0),P=xPer();
+  return `<div class="card wrap"><h2>📊 Tableau de bord des absences</h2>
+  <div class="row">${perSel()}<span class="mu">Seuil d'alerte :</span><input type="number" min="1" value="${seuilV()}" style="width:80px" onchange="setSeuil(this.value)"><span class="mu">demi-journées</span></div>
+  <p><b>Présence globale : ${taux(D,N*P.n*2)} %</b> <span class="mu">· ${N} élèves · ${D} demi-journée(s) d'absence</span></p>
+  <table><tr><th>SGA</th><th>Promotion</th><th>Classe</th><th>Effectif</th><th>Demi-journées</th><th>Présence</th><th>Élèves en alerte</th></tr>
+  ${rows.map(r=>`<tr><td>${esc(userName(r.c.owner))}</td><td>${esc(pn(r.c.owner,r.c.promo||'A'))}</td><td>${esc(r.c.name)}</td><td>${r.n}</td><td>${r.dj}</td><td>${r.t} %</td><td class="${r.al?'er':''}">${r.al?'⚠️ '+r.al:'0'}</td></tr>`).join('')||'<tr><td colspan="7" class="mu">Aucune classe.</td></tr>'}</table></div>`}
+function addExtras(){
+  if(!me||view.page!=='app')return;const m=$('m');if(!m)return;
+  if(me.role!=='surv'&&view.tab==='eleves'){m.insertAdjacentHTML('beforeend',xDash());return}
+  if(!view.cid||(me.role!=='surv'&&view.tab!=='sga'))return;
+  const c=db.classes.find(x=>x.id===view.cid);if(c)m.insertAdjacentHTML('beforeend',xTools(c)+xDetails(c)+xStats(c))}
+function upU(id,k,v){const u=db.users.find(x=>x.id===id);
+  if(k==='login'&&(!v||db.users.some(x=>x.id!==id&&x.login===v))){alert('Identifiant vide ou déjà utilisé');return render()}
+  if(k==='pass'&&v&&!okCode(v)){alert('Le code doit contenir au minimum 4 chiffres et/ou lettres (ou rester vide pour que la personne le recrée)');return render()}
+  u[k]=v;if(k==='pass'&&v){u.pcAt=Date.now();u.fails=0;if(u.auto){u.blocked=false;delete u.auto}db.reqs=(db.reqs||[]).filter(r=>r.u!==id)}save()}
+function exportX(){const rows=[['Surveillant','Classe','Nom complet','Sexe','Téléphone des parents'],...filtered().map(s=>[userName(s.owner),s.cls,s.name,s.sex==='M'?'Garçon':'Fille',s.phone])];
+  const wb=XLSX.utils.book_new();XLSX.utils.book_append_sheet(wb,XLSX.utils.aoa_to_sheet(rows),'Élèves');XLSX.writeFile(wb,'eleves.xlsx')}
+
+/* ===== Messagerie interne (synchronisée) ===== */
+const msgSeenK=()=>'ge_seen_'+(me?me.id:'');
+function msgSeen(){try{return JSON.parse(localStorage.getItem(msgSeenK()))||{}}catch(e){return{}}}
+const msgMine=m=>m.to==='all'||m.to===me.id||m.from===me.id;
+const msgTh=m=>m.to==='all'?'all':(m.from===me.id?m.to:m.from);
+function msgUnread(th){const sn=msgSeen();return(db.msgs||[]).filter(m=>msgMine(m)&&m.from!==me.id&&msgTh(m)===th&&m.t>(sn[th]||0)).length}
+function msgTotal(){if(!me)return 0;const sn=msgSeen();return(db.msgs||[]).filter(m=>msgMine(m)&&m.from!==me.id&&m.t>(sn[msgTh(m)]||0)).length}
+function msgBadge(){const n=msgTotal();document.title=(n?'('+n+') ':'')+'CEG1 ALLADA - Gestion des élèves';document.querySelectorAll('.mbd').forEach(e=>{e.textContent=n||'';e.style.display=n?'inline-block':'none'})}
+function msgPaint(first){
+  const el=$('mlist');if(!el||!me)return;
+  const th=view.mt||'all',nm=id=>(db.users.find(u=>u.id===id)||{name:'?'}).name,p=n=>String(n).padStart(2,'0');
+  const L=(db.msgs||[]).filter(m=>msgMine(m)&&msgTh(m)===th).sort((a,b)=>a.t-b.t).slice(-200);
+  const low=first||el.scrollHeight-el.scrollTop-el.clientHeight<60;
+  el.innerHTML=L.map(m=>{const mi=m.from===me.id,d=new Date(m.t);
+    return `<div class="mrow${mi?' me':''}"><div class="mbub"><div class="mnm">${mi?'Moi':esc(nm(m.from))} · ${p(d.getDate())}/${p(d.getMonth()+1)} ${p(d.getHours())}:${p(d.getMinutes())}${(mi||me.role==='master')?` <button class="d mx" onclick="msgDel('${m.id}')">✕</button>`:''}</div>${esc(m.text).replace(/\n/g,'<br>')}</div></div>`}).join('')||'<p class="mu" style="text-align:center">Aucun message. Écris le premier !</p>';
+  if(low)el.scrollTop=el.scrollHeight;
+  if(L.length){const sn=msgSeen(),mt=Math.max(...L.map(m=>m.t));if((sn[th]||0)<mt){sn[th]=mt;try{localStorage.setItem(msgSeenK(),JSON.stringify(sn))}catch(e){}}}
+  msgBadge()}
+/* Alerte sonore à l'arrivée d'un message */
+let sAC=null;
+function sndUnlock(){try{if(!sAC){const C=window.AudioContext||window.webkitAudioContext;if(C)sAC=new C()}if(sAC&&sAC.state==='suspended')sAC.resume()}catch(e){}}
+['pointerdown','touchstart','keydown','click'].forEach(e=>document.addEventListener(e,sndUnlock,{passive:true}));
+const sndOn=()=>{try{return localStorage.getItem('ge_snd')!=='0'}catch(e){return true}};
+function msgBeep(){
+  if(!sndOn())return;
+  try{if(navigator.vibrate)navigator.vibrate([120,60,120])}catch(e){}
+  try{
+    sndUnlock();if(!sAC||sAC.state!=='running')return;
+    const t0=sAC.currentTime;
+    [[880,0],[1175,.18]].forEach(([f,d])=>{const o=sAC.createOscillator(),g=sAC.createGain();
+      o.type='sine';o.frequency.value=f;
+      g.gain.setValueAtTime(0,t0+d);g.gain.linearRampToValueAtTime(.35,t0+d+.02);g.gain.exponentialRampToValueAtTime(.001,t0+d+.3);
+      o.connect(g);g.connect(sAC.destination);o.start(t0+d);o.stop(t0+d+.32)})
+  }catch(e){}}
+function msgSnd(){
+  const on=!sndOn();try{localStorage.setItem('ge_snd',on?'1':'0')}catch(e){}
+  const b=$('msnd');if(b)b.textContent=on?'🔔 Son activé':'🔕 Son coupé';
+  if(on)msgBeep()}
+function msgSend(){
+  const i=$('mt'),t=(i.value||'').trim();if(!t||!me)return;
+  db.msgs=db.msgs||[];db.msgs.push({id:uid(),from:me.id,to:view.mt||'all',text:t.slice(0,1000),t:Date.now()});
+  i.value='';save();msgPaint(1);i.focus();if(syOn())syRun()}
+function msgDel(id){
+  const m=(db.msgs||[]).find(x=>x.id===id);if(!m||!me||!(m.from===me.id||me.role==='master'))return;
+  if(!confirm('Supprimer ce message pour tout le monde ?'))return;
+  db.msgs=db.msgs.filter(x=>x.id!==id);save();msgPaint()}
+function msgPage(){
+  view.mt=view.mt||'all';
+  const opts=[['all','👥 Tout le monde']].concat(db.users.filter(u=>u.id!==me.id).map(u=>[u.id,u.name]));
+  return `<main><button class="s" onclick="go('app')">‹ Retour</button><div class="card" style="margin-top:12px;max-width:640px"><h2>💬 Messagerie</h2>
+  <div style="display:flex;justify-content:space-between;align-items:center;gap:8px;margin:-6px 0 10px;flex-wrap:wrap"><span></span><button class="s" id="msnd" onclick="msgSnd()" style="padding:4px 10px;font-size:12px">${sndOn()?'🔔 Son activé':'🔕 Son coupé'}</button></div>
+  <select id="mw" onchange="view.mt=this.value;msgPaint(1)" style="width:100%;margin-bottom:10px">${opts.map(([v,n])=>{const c=msgUnread(v);return `<option value="${esc(v)}"${v===view.mt?' selected':''}>${esc(n)}${c?' ('+c+' nouveau'+(c>1?'x':'')+')':''}</option>`}).join('')}</select>
+  <div id="mlist" class="mlist"></div>
+  <div class="row" style="margin-top:10px;flex-wrap:nowrap"><input id="mt" placeholder="Écris ton message…" maxlength="1000" autocomplete="off" style="flex:1;min-width:0" onkeydown="if(event.key==='Enter'&&!event.shiftKey){event.preventDefault();msgSend()}"><button onclick="msgSend()">Envoyer</button></div>
+  <p class="mu" style="margin-top:8px;font-size:12px">Écris à tout le monde ou en privé à une personne. Les messages sont partagés entre tous les appareils reliés par la synchronisation.</p></div></main>`}
+
+render();
+</script>
+</body>
+</html>
