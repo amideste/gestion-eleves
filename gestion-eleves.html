@@ -142,11 +142,12 @@ const sySave=()=>{try{localStorage.setItem(SY_KEY,JSON.stringify(sy))}catch(e){}
 const syF=k=>k.replace(/[%.$#\[\]\/]/g,c=>'%'+c.charCodeAt(0).toString(16).padStart(2,'0'));
 const syD=k=>decodeURIComponent(k);
 /* Ajout des comptes SG 9 et 10 sur les appareils déjà installés (sans écraser ce que la synchronisation a déjà récupéré) */
-[['s9','SG A DÉFINIR 4','sga9'],['s10','SG A DÉFINIR 5','sga10']].forEach(([id,name,login])=>{
+if(!db.sg10)[['s9','SG A DÉFINIR 4','sga9'],['s10','SG A DÉFINIR 5','sga10']].forEach(([id,name,login])=>{
   if(db.users.some(u=>u.id===id))return;
   const o={id,name,login,pass:'',role:'surv'};db.users.push(o);
   if(sy.init){sy.meta['users/'+id]={t:0,s:JSON.stringify(o),d:0};sySave()}
   try{localStorage.setItem(KEY,JSON.stringify(db))}catch(e){}});
+db.sg10=1;
 function syFlat(){
   const f={};
   (db.users||[]).forEach(o=>f['users/'+o.id]=JSON.stringify(o));
@@ -336,9 +337,13 @@ const $=id=>document.getElementById(id);
 const userName=id=>(db.users.find(u=>u.id===id)||{}).name||'?';
 const ow=()=>me.role==='surv'?me.id:view.sg;
 function go(p,o={}){Object.assign(view,{page:p,cid:null,promo:null,sg:null,target:null},o);pending=null;render()}
-function sgList(){return db.users.filter(u=>u.role==='surv').map(u=>`<div class="cls" onclick="openSG('${u.id}')"><b>${esc(u.name)}</b><span><span class="mu">${db.classes.filter(c=>c.owner===u.id).length} classe(s)</span> <button class="s" onclick="event.stopPropagation();ren('${u.id}')">✏️</button></span></div>`).join('')}
+const isM=()=>!!(me&&me.role==='master');
+const canRen=()=>!!(me&&(me.role==='master'||me.role==='surv'));
+const canRenStu=()=>!!(me&&(me.role==='master'||me.role==='surv'||me.role==='sup'));
+const promoKeys=id=>(db.users.find(u=>u.id===id)||{}).promoKeys||['A','B','C'];
+function sgList(){return db.users.filter(u=>u.role==='surv').map(u=>`<div class="cls" onclick="openSG('${u.id}')"><b>${esc(u.name)}</b><span><span class="mu">${db.classes.filter(c=>c.owner===u.id).length} classe(s)</span> ${isM()?`<button class="s" title="Renommer le SG" onclick="event.stopPropagation();ren('${u.id}')">✏️</button> <button class="d" title="Supprimer le SG" onclick="event.stopPropagation();delSG('${u.id}')">🗑</button>`:''}</span></div>`).join('')+(isM()?`<div class="row" style="margin-top:12px"><button onclick="addSG()">+ Créer un SG</button></div>`:'')}
 const pn=(o,k)=>((db.users.find(u=>u.id===o)||{}).promos||{})[k]||'Promo '+k;
-function renPromo(k){const u=db.users.find(x=>x.id===ow()),n=prompt('Nouveau nom de la promotion :',pn(u.id,k));if(n&&n.trim()){u.promos=u.promos||{};u.promos[k]=n.trim();save();render()}}
+function renPromo(k){if(!isM())return;const u=db.users.find(x=>x.id===ow()),n=prompt('Nouveau nom de la promotion :',pn(u.id,k));if(n&&n.trim()){u.promos=u.promos||{};u.promos[k]=n.trim();save();render()}}
 const nz=t=>String(t).normalize('NFD').replace(/[\u0300-\u036f]/g,'').toLowerCase();
 function doSearch(v){
   const q=nz(v.trim()),r=$('sr');
@@ -347,7 +352,7 @@ function doSearch(v){
   r.innerHTML=l.map(s=>{const c=db.classes.find(x=>x.id===s.cid)||{};
     return `<div class="cls" style="cursor:default;display:block"><b>${esc(s.name)}</b><div class="mu">Classe : ${esc(c.name||'?')} · ${esc(pn(c.owner,c.promo||'A'))} · ${esc(userName(c.owner))}</div></div>`}).join('')||'<p class="mu">Aucun élève trouvé.</p>';
 }
-function ren(id){const u=db.users.find(x=>x.id===id),n=prompt('Nouveau nom :',u.name);if(n&&n.trim()){u.name=n.trim();save();render()}}
+function ren(id){if(!isM())return;const u=db.users.find(x=>x.id===id),n=prompt('Nouveau nom :',u.name);if(n&&n.trim()){u.name=n.trim();save();render()}}
 function openSG(id){if(me){view.sg=id;view.cid=null;view.promo=null;view.tab='sga';render()}else go('login',{target:id})}
 function addEyes(){
   document.querySelectorAll('input[type=password]').forEach(i=>{
@@ -456,24 +461,25 @@ function renderSurv(){
   const m=$('m');
   if(!view.promo){
     m.innerHTML=`${survCr(0)}<div class="card"><h2>${esc(userName(ow()))}</h2>
-    ${['A','B','C'].map(k=>`<div class="cls" onclick="view.promo='${k}';render()"><b>${esc(pn(ow(),k))}</b><span><span class="mu">${db.classes.filter(c=>c.owner===ow()&&(c.promo||'A')===k).length} classe(s) ›</span> <button class="s" onclick="event.stopPropagation();renPromo('${k}')">✏️</button></span></div>`).join('')}</div>`;
+    ${promoKeys(ow()).map(k=>`<div class="cls" onclick="view.promo='${k}';render()"><b>${esc(pn(ow(),k))}</b><span><span class="mu">${db.classes.filter(c=>c.owner===ow()&&(c.promo||'A')===k).length} classe(s) ›</span> ${isM()?`<button class="s" title="Renommer la promotion" onclick="event.stopPropagation();renPromo('${k}')">✏️</button> <button class="d" title="Supprimer la promotion" onclick="event.stopPropagation();delPromo('${k}')">🗑</button>`:''}</span></div>`).join('')||'<p class="mu">Aucune promotion.</p>'}
+    ${isM()?`<div class="row" style="margin-top:12px"><button onclick="addPromo()">+ Créer une promotion</button></div>`:''}</div>`;
     return;
   }
   if(!view.cid){
     const cl=db.classes.filter(c=>c.owner===ow()&&(c.promo||'A')===view.promo);
     m.innerHTML=`${survCr(1)}<div class="card"><h2>${esc(pn(ow(),view.promo))} · classes</h2>
     <div class="row"><input id="cn" placeholder="Nom de la classe (ex : 6e A)"><button onclick="addClass()">+ Créer</button></div>
-    ${cl.map(c=>`<div class="cls" onclick="view.cid='${c.id}';render()"><b>${esc(c.name)}</b><span><span class="mu">${db.students.filter(s=>s.cid===c.id).length} élève(s) ›</span> <button class="s" title="Modifier le nom de la classe" onclick="event.stopPropagation();renClass('${c.id}')">✏️</button></span></div>`).join('')||'<p class="mu">Aucune classe pour le moment.</p>'}</div>`;
+    ${cl.map(c=>`<div class="cls" onclick="view.cid='${c.id}';render()"><b>${esc(c.name)}</b><span><span class="mu">${db.students.filter(s=>s.cid===c.id).length} élève(s) ›</span> ${canRen()?`<button class="s" title="Modifier le nom de la classe" onclick="event.stopPropagation();renClass('${c.id}')">✏️</button>`:''} ${isM()?`<button class="d" title="Supprimer la classe" onclick="event.stopPropagation();delClass('${c.id}')">🗑</button>`:''}</span></div>`).join('')||'<p class="mu">Aucune classe pour le moment.</p>'}</div>`;
     return;
   }
   const c=db.classes.find(x=>x.id===view.cid),st=db.students.filter(s=>s.cid===c.id);
   m.innerHTML=`${survCr(2)}
-  <div class="card"><h2>${esc(c.name)} <span class="mu">(${st.length})</span> <button class="s" title="Modifier le nom de la classe" onclick="renClass('${c.id}')">✏️ Modifier la classe</button></h2>
+  <div class="card"><h2>${esc(c.name)} <span class="mu">(${st.length})</span> ${canRen()?`<button class="s" title="Modifier le nom de la classe" onclick="renClass('${c.id}')">✏️ Modifier la classe</button>`:''}</h2>
   <div class="row"><input id="n" placeholder="Nom complet"><select id="sx"><option value="M">Garçon</option><option value="F">Fille</option></select>
   <input id="t" type="tel" placeholder="Téléphone des parents (facultatif)"><button onclick="addStu()">+ Ajouter</button></div>
   <div class="row"><label class="btn s" style="border:1px solid var(--bd);color:var(--pr);background:none">📥 Importer Excel / Word<input type="file" hidden accept=".xlsx,.xls,.csv,.docx" onchange="importFile(this.files[0])"></label>
   <button class="s" onclick="tpl()">Modèle Excel</button>
-  <button class="d" onclick="delClass('${c.id}')">Supprimer la classe</button></div>
+  ${isM()?`<button class="d" onclick="delClass('${c.id}')">Supprimer la classe</button>`:''}</div>
   <div id="prev"></div></div>
   ${absCard(st)}`;
   if(pending)showPrev();
@@ -481,24 +487,51 @@ function renderSurv(){
 function addClass(){const n=$('cn').value.trim();if(!n)return;
   if(db.classes.some(c=>c.owner===ow()&&(c.promo||'A')===view.promo&&c.name.toLowerCase()===n.toLowerCase()))return alert('Cette classe existe déjà');
   db.classes.push({id:uid(),owner:ow(),promo:view.promo,name:n});save();render()}
-function renClass(id){const c=db.classes.find(x=>x.id===id);if(!c)return;
+function renClass(id){if(!canRen())return;const c=db.classes.find(x=>x.id===id);if(!c)return;
   let n=prompt('Nouveau nom de la classe :',c.name);if(n===null)return;
   n=n.trim().replace(/\s+/g,' ');if(!n)return alert('Le nom de la classe ne peut pas être vide');if(n===c.name)return;
   if(db.classes.some(x=>x.id!==c.id&&x.owner===c.owner&&(x.promo||'A')===(c.promo||'A')&&x.name.toLowerCase()===n.toLowerCase()))return alert('Cette classe existe déjà');
   c.name=n;save();render()}
-function renStu(id){const s=db.students.find(x=>x.id===id);if(!s)return;
+function renStu(id){if(!canRenStu())return;const s=db.students.find(x=>x.id===id);if(!s)return;
   let n=prompt("Nouveau nom de l'élève :",s.name);if(n===null)return;
   n=n.trim().replace(/\s+/g,' ');if(!n)return alert("Le nom de l'élève ne peut pas être vide");if(n===s.name)return;
   const k=n.toLowerCase()+'|'+String(s.phone||'').replace(/\D/g,'');
   if(db.students.some(x=>x.id!==s.id&&x.cid===s.cid&&x.name.toLowerCase()+'|'+String(x.phone||'').replace(/\D/g,'')===k))return alert("Un élève avec ce nom et ce téléphone existe déjà dans cette classe");
   s.name=n;save();render()}
-function delClass(id){if(!confirm('Supprimer cette classe et tous ses élèves ?'))return;
-  db.classes=db.classes.filter(c=>c.id!==id);db.students=db.students.filter(s=>s.cid!==id);view.cid=null;save();render()}
+function purgeStu(ids){const S=new Set(ids);db.students=db.students.filter(x=>!S.has(x.id));
+  ['abs','ext'].forEach(n=>{const m=db[n]||{};Object.keys(m).forEach(d=>{Object.keys(m[d]||{}).forEach(sid=>{if(S.has(sid))delete m[d][sid]});if(!Object.keys(m[d]||{}).length)delete m[d]})})}
+function dropClasses(ids){const C=new Set(ids);purgeStu(db.students.filter(x=>C.has(x.cid)).map(x=>x.id));db.classes=db.classes.filter(c=>!C.has(c.id))}
+function delClass(id){if(!isM())return;
+  const c=db.classes.find(x=>x.id===id);if(!c)return;const n=db.students.filter(x=>x.cid===id).length;
+  if(!confirm('Supprimer la classe « '+c.name+' » et ses '+n+' élève(s) ? Cette action est définitive.'))return;
+  dropClasses([id]);view.cid=null;pending=null;save();render()}
+function addSG(){if(!isM())return;
+  let n=prompt('Nom du nouveau SG (ex : SG DOSSOU) :');if(n===null)return;
+  n=n.trim().replace(/\s+/g,' ');if(!n)return alert('Le nom ne peut pas être vide');
+  if(db.users.some(u=>nz(u.name)===nz(n)))return alert('Ce nom existe déjà');
+  const L=new Set(db.users.map(u=>u.login));let i=1;while(L.has('sga'+i))i++;
+  db.users.push({id:'x'+uid(),name:n,login:'sga'+i,pass:'',role:'surv'});save();render()}
+function delSG(id){if(!isM())return;
+  const u=db.users.find(x=>x.id===id);if(!u||u.role!=='surv')return;
+  const cl=db.classes.filter(c=>c.owner===id),ns=db.students.filter(x=>cl.some(c=>c.id===x.cid)).length;
+  if(!confirm('Supprimer le SG « '+u.name+' » avec ses '+cl.length+' classe(s) et ses '+ns+' élève(s) ? Cette action est définitive.'))return;
+  dropClasses(cl.map(c=>c.id));db.users=db.users.filter(x=>x.id!==id);db.reqs=(db.reqs||[]).filter(r=>r.u!==id);
+  view.sg=null;view.promo=null;view.cid=null;save();render()}
+function addPromo(){if(!isM())return;const u=db.users.find(x=>x.id===ow());if(!u)return;
+  let n=prompt('Nom de la nouvelle promotion :');if(n===null)return;
+  n=n.trim().replace(/\s+/g,' ');if(!n)return alert('Le nom ne peut pas être vide');
+  const ks=promoKeys(u.id).slice();if(ks.some(k=>nz(pn(u.id,k))===nz(n)))return alert('Cette promotion existe déjà');
+  const k='P'+uid();ks.push(k);u.promoKeys=ks;u.promos=u.promos||{};u.promos[k]=n;save();render()}
+function delPromo(k){if(!isM())return;const u=db.users.find(x=>x.id===ow());if(!u)return;
+  const cl=db.classes.filter(c=>c.owner===u.id&&(c.promo||'A')===k),ns=db.students.filter(x=>cl.some(c=>c.id===x.cid)).length;
+  if(!confirm('Supprimer la promotion « '+pn(u.id,k)+' » avec ses '+cl.length+' classe(s) et ses '+ns+' élève(s) ? Cette action est définitive.'))return;
+  dropClasses(cl.map(c=>c.id));u.promoKeys=promoKeys(u.id).filter(x=>x!==k);if(u.promos)delete u.promos[k];
+  view.promo=null;view.cid=null;save();render()}
 function addStu(){
   const r=check($('n').value,$('sx').value,$('t').value,view.cid);
   if(r.err)return alert(r.err);
   db.students.push({id:uid(),cid:view.cid,name:r.name,sex:r.sex,phone:r.phone});save();render()}
-function delStu(id){db.students=db.students.filter(s=>s.id!==id);save();render()}
+function delStu(id){if(!isM())return;const st=db.students.find(x=>x.id===id);if(!st||!confirm('Supprimer l\'élève « '+st.name+' » ? Cette action est définitive.'))return;purgeStu([id]);save();render()}
 
 /* ===== Présence / Absence ===== */
 const fmtD=d=>d.getFullYear()+'-'+String(d.getMonth()+1).padStart(2,'0')+'-'+String(d.getDate()).padStart(2,'0');
@@ -517,10 +550,10 @@ function absCard(st){
   <p class="mu">Rien de coché = présent ce jour. Utilise ◀ ou la date pour revenir à un jour précédent.</p>
   ${pdfPanel(view.cid)}
   <div class="wrap"><table><tr><th>N°</th><th>Nom complet</th><th>Sexe</th><th>Téléphone parents</th><th>Matin</th><th>Soir</th><th></th></tr>
-  ${st.map((s,i)=>{const r=day[s.id]||{};return `<tr${r.m||r.s?' style="background:rgba(192,80,74,.09)"':''}><td class="mu">${i+1}</td><td>${esc(s.name)} <button class="s" title="Modifier le nom" style="padding:2px 8px" onclick="renStu('${s.id}')">✏️</button></td><td>${s.sex==='M'?'Garçon':'Fille'}</td><td>${esc(s.phone)}</td>
+  ${st.map((s,i)=>{const r=day[s.id]||{};return `<tr${r.m||r.s?' style="background:rgba(192,80,74,.09)"':''}><td class="mu">${i+1}</td><td>${esc(s.name)} ${canRenStu()?`<button class="s" title="Modifier le nom" style="padding:2px 8px" onclick="renStu('${s.id}')">✏️</button>`:''}</td><td>${s.sex==='M'?'Garçon':'Fille'}</td><td>${esc(s.phone)}</td>
   <td><button class="ab am ${r.m?'on':''}" onclick="toggleAb('${s.id}','m')">Ab matin</button></td>
   <td><button class="ab as ${r.s?'on':''}" onclick="toggleAb('${s.id}','s')">Ab soir</button></td>
-  <td><button class="d" onclick="delStu('${s.id}')">✕</button></td></tr>`}).join('')||'<tr><td colspan="7" class="mu">Aucun élève.</td></tr>'}</table></div></div>`}
+  <td>${isM()?`<button class="d" onclick="delStu('${s.id}')">✕</button>`:''}</td></tr>`}).join('')||'<tr><td colspan="7" class="mu">Aucun élève.</td></tr>'}</table></div></div>`}
 
 /* ===== Export PDF des absents ===== */
 const pdfPanel=cid=>`<div class="row" style="margin-top:10px;padding-top:10px;border-top:1px solid var(--bd)"><b>📄 PDF des absents</b>
