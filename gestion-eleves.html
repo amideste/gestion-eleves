@@ -125,8 +125,8 @@ const SY_KEY='gestion_eleves_sync_v1';
 let sy;try{sy=JSON.parse(localStorage.getItem(SY_KEY))||{}}catch(e){sy={}}
 sy.meta=sy.meta||{};
 /* >>> Renseigne ici ton adresse Firebase et ton code de synchronisation : la synchronisation sera automatique sur tous les appareils <<< */
-const SY_URL='';  /* exemple : 'https://mon-projet-default-rtdb.firebaseio.com' */
-const SY_ROOM=''; /* exemple : 'ceg1allada2026secret' (12 caractères minimum, lettres/chiffres/_/-) */
+const SY_URL='https://absence-eleves-ceg-1-all-default-rtdb.firebaseio.com';  /* exemple : 'https://mon-projet-default-rtdb.firebaseio.com' */
+const SY_ROOM='ceg1c2y6pyvy5o0jxcow'; /* exemple : 'ceg1allada2026secret' (12 caractères minimum, lettres/chiffres/_/-) */
 if(SY_URL&&SY_ROOM&&(sy.url!==SY_URL.replace(/\/+$/,'')||sy.room!==SY_ROOM)){sy={url:SY_URL.replace(/\/+$/,''),room:SY_ROOM,init:0,meta:{}};try{localStorage.setItem(SY_KEY,JSON.stringify(sy))}catch(e){}}
 const syStat={st:'',last:0};let syBusy=0,syTm=null,syPend=0,syNew=0;
 const syOn=()=>!!(sy.url&&sy.room);
