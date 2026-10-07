@@ -4,7 +4,7 @@
 <meta charset="utf-8">
 <meta name="viewport" content="width=device-width, initial-scale=1">
 <meta name="color-scheme" content="light">
-<title>CEG1 ALLADA - Gestion des élèves</title>
+<title>CEG1 ALLADA - Gestion Présence/Absence des élèves</title>
 <script src="https://cdnjs.cloudflare.com/ajax/libs/xlsx/0.18.5/xlsx.full.min.js"></script>
 <script src="https://cdnjs.cloudflare.com/ajax/libs/jspdf/2.5.1/jspdf.umd.min.js"></script>
 <script src="https://cdnjs.cloudflare.com/ajax/libs/jspdf-autotable/3.8.2/jspdf.plugin.autotable.min.js"></script>
@@ -92,6 +92,12 @@ body.acct button.mg{--c:#4F46E5;--cd:#3730A3}
 .mx{padding:0 6px!important;font-size:10px!important;margin-left:6px;box-shadow:none!important}
 .mbd{background:#DC2626;color:#fff;border-radius:999px;font-size:11px;padding:0 6px;margin-left:4px;font-weight:700}
 @media(prefers-reduced-motion:reduce){*{transition:none!important}}
+.bc{display:flex;flex-wrap:wrap;align-items:center;gap:6px;margin:0 0 12px}
+.bc button{padding:6px 11px;font-size:13px;border-radius:10px}
+.bc .bk{background:var(--pr);color:var(--onpr);border:0}
+.bc .sep{color:var(--mu);font-size:14px}
+.bc .cur{font-size:13px;font-weight:700;color:var(--tx);padding:6px 4px}
+.login .bc{justify-content:center}
 </style>
 </head>
 <body>
@@ -289,9 +295,26 @@ function sessBeat(){if(!me||!syOn())return;fetch(pUrl(me.id)+SID+'.json',{method
 setInterval(sessBeat,20000);
 document.addEventListener('visibilitychange',()=>{if(!document.hidden)sessBeat()});
 function logout(){if(me&&syOn()){try{fetch(pUrl(me.id)+SID+'.json',{method:'DELETE',keepalive:true})}catch(e){}}me=null;go('home')}
-function syPage(back){
+function crumbs(it){
+  const back=[...it].reverse().find(x=>x[1]);
+  return `<div class="bc">${back?`<button class="bk" onclick="${back[1]}">‹ Retour</button>`:''}${it.map(x=>x[1]?`<button class="s" onclick="${x[1]}">${x[0]}</button><span class="sep">›</span>`:`<span class="cur">${x[0]}</span>`).join('')}</div>`}
+function leave(to){if(me){if(!confirm('Vous allez être déconnecté. Continuer ?'))return;logout()}if(to&&to!=='home')go(to);else if(!me)go('home')}
+function baseCr(){const r=[['🏠 Accueil',"leave('home')"]];
+  if(me.role==='surv')r.push(['Les SGA',"leave('sga')"],[esc(me.name),"go('app')"]);else r.push([esc(me.name),"go('app')"]);
+  return r}
+function lcr(u,last){return crumbs([['🏠 Accueil',"go('home')"],...(u.role==='surv'?[['Les SGA',"go('sga')"]]:[]),...last])}
+function survCr(level){
+  const sup=me.role!=='surv',r=[['🏠 Accueil',"leave('home')"]];
+  r.push(sup?['Les SGA',"view.sg=null;view.cid=null;view.promo=null;render()"]:['Les SGA',"leave('sga')"]);
+  const sgn=esc(userName(ow()));
+  if(level===0){r.push([sgn,null]);return crumbs(r)}
+  r.push([sgn,"view.promo=null;view.cid=null;pending=null;render()"]);
+  if(level===1){r.push([esc(pn(ow(),view.promo)),null]);return crumbs(r)}
+  r.push([esc(pn(ow(),view.promo)),"view.cid=null;pending=null;render()"]);
+  const c=db.classes.find(x=>x.id===view.cid);r.push([esc(c?c.name:'Classe'),null]);return crumbs(r)}
+function syPage(back,bc){
   const on=syOn(),ms=syMaster();
-  return `<main><button class="s" onclick="${back}">‹ Retour</button><div class="card" style="margin-top:12px;max-width:520px"><h2>🔄 Synchronisation</h2>
+  return `<main>${bc||`<button class="s" onclick="${back}">‹ Retour</button>`}<div class="card" style="margin-top:12px;max-width:520px"><h2>🔄 Synchronisation</h2>
   <p class="mu">État : <b class="syt">${syTxt()}</b></p>
   ${on?`<div class="row"><button onclick="syNow()">Synchroniser maintenant</button></div>
   ${ms?`<div class="row" style="margin-top:10px"><button class="s" onclick="syCopy()">📋 Copier le code de liaison</button><button class="s" onclick="syResend()">Renvoyer mes données</button><button class="s" onclick="syOff()">Arrêter</button></div><p class="mu" style="margin-top:10px">Colle le code de liaison sur chaque autre appareil (téléphone, tablette, ordinateur) pour partager les mêmes données.</p>`:`<p class="mu" style="margin-top:10px">Seul MasterLog peut modifier la synchronisation.</p>`}`
@@ -341,19 +364,19 @@ function render0(){
   const a=$('app');
   if(!me){
     const bt=['login','forgot'].includes(view.page)&&db.users.find(x=>x.id===view.target);
-    if(bt&&bt.blocked)return a.innerHTML=`<div class="login card"><h2>${esc(bt.name)}</h2><p class="er"><b>🔒 Compte bloqué.</b></p><p class="mu">Contacte MasterLog pour le débloquer.</p><button class="s" style="width:100%" onclick="go('${bt.role==='surv'?'sga':'home'}')">Retour</button></div>`;
-    if(view.page==='sync')return a.innerHTML=syPage("go('home')");
-    if(view.page==='sga')return a.innerHTML=`<main><button class="s" onclick="go('home')">‹ Accueil</button><div class="card" style="margin-top:12px"><h2>Les SGA</h2>${sgList()}</div></main>`;
-    if(view.page==='search')return a.innerHTML=`<main><button class="s" onclick="go('home')">‹ Accueil</button><div class="card" style="margin-top:12px"><h2>🔍 Recherche d'un élève</h2><input id="sq" placeholder="Écris le nom de l'élève…" style="width:100%" oninput="doSearch(this.value)" autofocus><div id="sr" style="margin-top:12px"></div></div></main>`;
+    if(bt&&bt.blocked)return a.innerHTML=`<div class="login card">${lcr(bt,[[esc(bt.name),null]])}<h2>${esc(bt.name)}</h2><p class="er"><b>🔒 Compte bloqué.</b></p><p class="mu">Contacte MasterLog pour le débloquer.</p><button class="s" style="width:100%" onclick="go('${bt.role==='surv'?'sga':'home'}')">Retour</button></div>`;
+    if(view.page==='sync')return a.innerHTML=syPage("go('home')",crumbs([['🏠 Accueil',"go('home')"],['Synchronisation',null]]));
+    if(view.page==='sga')return a.innerHTML=`<main>${crumbs([['🏠 Accueil',"go('home')"],['Les SGA',null]])}<div class="card"><h2>Les SGA</h2>${sgList()}</div></main>`;
+    if(view.page==='search')return a.innerHTML=`<main>${crumbs([['🏠 Accueil',"go('home')"],['Recherche',null]])}<div class="card"><h2>🔍 Recherche d'un élève</h2><input id="sq" placeholder="Écris le nom de l'élève…" style="width:100%" oninput="doSearch(this.value)" autofocus><div id="sr" style="margin-top:12px"></div></div></main>`;
     if(view.page==='forgot'){const u=db.users.find(x=>x.id===view.target);
-      return a.innerHTML=`<div class="login card"><h2>Code oublié : ${esc(u.name)}</h2>${u.role==='master'?(1?`<input id="g1" type="password" autocomplete="off" autocapitalize="none"><input id="g2" type="password" autocomplete="off" autocapitalize="none"><input id="nc" type="password" placeholder="Nouveau code (minimum 4 chiffres et/ou lettres)"><input id="nc2" type="password" placeholder="Confirme le nouveau code"><button style="width:100%" onclick="resetCode()">Réinitialiser mon code</button>`:''):`<p class="mu">Pour récupérer ton code, envoie un message à MasterLog. Il va réinitialiser ton code, puis tu pourras en créer un nouveau à ta prochaine connexion.</p><button class="wa" style="width:100%" onclick="askReset('wa')">📩 Envoyer à MasterLog (WhatsApp)</button><button class="s sm" style="width:100%;margin-top:8px" onclick="askReset('sms')">✉️ Envoyer à MasterLog (SMS)</button>`}<button class="s" style="width:100%;margin-top:8px" onclick="go('login',{target:'${u.id}'})">Retour</button></div>`}
+      return a.innerHTML=`<div class="login card">${lcr(u,[[esc(u.name),"go('login',{target:'"+u.id+"'})"],['Code oublié',null]])}<h2>Code oublié : ${esc(u.name)}</h2>${u.role==='master'?(1?`<input id="g1" type="password" autocomplete="off" autocapitalize="none"><input id="g2" type="password" autocomplete="off" autocapitalize="none"><input id="nc" type="password" placeholder="Nouveau code (minimum 4 chiffres et/ou lettres)"><input id="nc2" type="password" placeholder="Confirme le nouveau code"><button style="width:100%" onclick="resetCode()">Réinitialiser mon code</button>`:''):`<p class="mu">Pour récupérer ton code, envoie un message à MasterLog. Il va réinitialiser ton code, puis tu pourras en créer un nouveau à ta prochaine connexion.</p><button class="wa" style="width:100%" onclick="askReset('wa')">📩 Envoyer à MasterLog (WhatsApp)</button><button class="s sm" style="width:100%;margin-top:8px" onclick="askReset('sms')">✉️ Envoyer à MasterLog (SMS)</button>`}<button class="s" style="width:100%;margin-top:8px" onclick="go('login',{target:'${u.id}'})">Retour</button></div>`}
     if(view.page==='login'){const u=db.users.find(x=>x.id===view.target);
-      if(!u.pass)return a.innerHTML=`<div class="login card"><h2>${esc(u.name)}</h2><p class="mu">Première connexion : crée ton code personnel (minimum 4 chiffres et/ou lettres).</p>
+      if(!u.pass)return a.innerHTML=`<div class="login card">${lcr(u,[[esc(u.name),null]])}<h2>${esc(u.name)}</h2><p class="mu">Première connexion : crée ton code personnel (minimum 4 chiffres et/ou lettres).</p>
       <input id="nc" type="password" placeholder="Ton code (minimum 4 caractères)"><input id="nc2" type="password" placeholder="Confirme ton code">
       <button style="width:100%" onclick="setupCode()">Créer mon code</button><button class="s" style="width:100%;margin-top:8px" onclick="go('${u.role==='surv'?'sga':'home'}')">Retour</button></div>`;
-      return a.innerHTML=`<div class="login card"><h2>${esc(u.name)}</h2><input id="lg" value="${esc(u.login)}" autocapitalize="none"><input id="pw" type="password" placeholder="Mot de passe"><button style="width:100%" onclick="login()">Se connecter</button><button class="s" style="width:100%;margin-top:8px" onclick="go('forgot',{target:'${u.id}'})">Code oublié ?</button><button class="s" style="width:100%;margin-top:8px" onclick="go('${u.role==='surv'?'sga':'home'}')">Retour</button></div>`}
+      return a.innerHTML=`<div class="login card">${lcr(u,[[esc(u.name),null]])}<h2>${esc(u.name)}</h2><input id="lg" value="${esc(u.login)}" autocapitalize="none"><input id="pw" type="password" placeholder="Mot de passe"><button style="width:100%" onclick="login()">Se connecter</button><button class="s" style="width:100%;margin-top:8px" onclick="go('forgot',{target:'${u.id}'})">Code oublié ?</button><button class="s" style="width:100%;margin-top:8px" onclick="go('${u.role==='surv'?'sga':'home'}')">Retour</button></div>`}
     return a.innerHTML=`<div id="home" class="login card" style="max-width:560px;padding:12px 18px;margin-top:1.5vh;margin-bottom:1.5vh"><div style="font-size:26px;font-weight:800;letter-spacing:1px;color:var(--pr);margin:2px 0">CEG1 ALLADA</div>
-    <h2 style="text-align:center;font-size:19px;font-weight:600;color:var(--mu);margin-bottom:12px">📚 Gestion des élèves</h2>
+    <h2 style="text-align:center;font-size:19px;font-weight:600;color:var(--mu);margin-bottom:12px">📚 Gestion Présence/Absence des élèves</h2>
     <button class="hb" onclick="go('login',{target:'de'})">Le Directeur</button>
     <button class="hb" onclick="go('login',{target:'cens'})">Le Censeur</button>
     <button class="hb" onclick="go('login',{target:'compt'})">Le Comptable</button>
@@ -366,8 +389,8 @@ function render0(){
   }
   const hd=`<header><b>📚 ${esc(me.name)}</b><span><button class="s mg" onclick="go('msg')" title="Messagerie">💬<span class="mbd" style="display:${msgTotal()?'inline-block':'none'}">${msgTotal()||''}</span></button> <button class="s" onclick="go('sync')" title="Synchronisation">🔄</button> <button class="s" onclick="go('mycode')">🔑 Mon code</button> <button class="s" onclick="logout()">Déconnexion</button></span></header>`;
   if(view.page==='msg')return a.innerHTML=hd+msgPage();
-  if(view.page==='sync')return a.innerHTML=hd+syPage("go('app')");
-  if(view.page==='mycode')return a.innerHTML=hd+`<main><div class="card" style="max-width:420px"><h2>Mon code</h2>
+  if(view.page==='sync')return a.innerHTML=hd+syPage("go('app')",crumbs([...baseCr(),['Synchronisation',null]]));
+  if(view.page==='mycode')return a.innerHTML=hd+`<main>${crumbs([...baseCr(),['Mon code',null]])}<div class="card" style="max-width:420px"><h2>Mon code</h2>
   <input id="oc" type="password" placeholder="Code actuel" style="width:100%;margin-bottom:10px">
   <input id="nc" type="password" placeholder="Nouveau code, minimum 4 chiffres/lettres (vide = inchangé)" style="width:100%;margin-bottom:10px">
   <input id="nc2" type="password" placeholder="Confirmer le nouveau code" style="width:100%;margin-bottom:10px">
@@ -405,7 +428,7 @@ function resetCode(){
 function askReset(k){
   const u=db.users.find(x=>x.id===view.target);if(!u||u.blocked)return;
   db.reqs=(db.reqs||[]).filter(r=>r.u!==u.id);db.reqs.push({u:u.id,t:Date.now()});save();
-  const txt='CEG1 ALLADA - Gestion des élèves : '+u.name+' (identifiant : '+u.login+') a oublié son code. Merci de le réinitialiser.';
+  const txt='CEG1 ALLADA - Gestion Présence/Absence des élèves : '+u.name+' (identifiant : '+u.login+') a oublié son code. Merci de le réinitialiser.';
   if(k==='sms')location.href='sms:+229'+MASTER_TEL+'?body='+encodeURIComponent(txt);
   else window.open('https://wa.me/229'+MASTER_TEL+'?text='+encodeURIComponent(txt),'_blank');
   alert('Demande enregistrée pour MasterLog. Si le message ne s\'est pas ouvert, appelle MasterLog au '+MASTER_TEL+'.')}
@@ -432,22 +455,22 @@ async function login(){
 function renderSurv(){
   const m=$('m');
   if(!view.promo){
-    m.innerHTML=`${me.role!=='surv'?'<button class="s" style="margin-bottom:12px" onclick="view.sg=null;render()">‹ Les SGA</button>':''}<div class="card"><h2>${esc(userName(ow()))}</h2>
+    m.innerHTML=`${survCr(0)}<div class="card"><h2>${esc(userName(ow()))}</h2>
     ${['A','B','C'].map(k=>`<div class="cls" onclick="view.promo='${k}';render()"><b>${esc(pn(ow(),k))}</b><span><span class="mu">${db.classes.filter(c=>c.owner===ow()&&(c.promo||'A')===k).length} classe(s) ›</span> <button class="s" onclick="event.stopPropagation();renPromo('${k}')">✏️</button></span></div>`).join('')}</div>`;
     return;
   }
   if(!view.cid){
     const cl=db.classes.filter(c=>c.owner===ow()&&(c.promo||'A')===view.promo);
-    m.innerHTML=`<button class="s" style="margin-bottom:12px" onclick="view.promo=null;render()">‹ ${esc(userName(ow()))}</button><div class="card"><h2>${esc(pn(ow(),view.promo))} · classes</h2>
+    m.innerHTML=`${survCr(1)}<div class="card"><h2>${esc(pn(ow(),view.promo))} · classes</h2>
     <div class="row"><input id="cn" placeholder="Nom de la classe (ex : 6e A)"><button onclick="addClass()">+ Créer</button></div>
-    ${cl.map(c=>`<div class="cls" onclick="view.cid='${c.id}';render()"><b>${esc(c.name)}</b><span class="mu">${db.students.filter(s=>s.cid===c.id).length} élève(s) ›</span></div>`).join('')||'<p class="mu">Aucune classe pour le moment.</p>'}</div>`;
+    ${cl.map(c=>`<div class="cls" onclick="view.cid='${c.id}';render()"><b>${esc(c.name)}</b><span><span class="mu">${db.students.filter(s=>s.cid===c.id).length} élève(s) ›</span> <button class="s" title="Modifier le nom de la classe" onclick="event.stopPropagation();renClass('${c.id}')">✏️</button></span></div>`).join('')||'<p class="mu">Aucune classe pour le moment.</p>'}</div>`;
     return;
   }
   const c=db.classes.find(x=>x.id===view.cid),st=db.students.filter(s=>s.cid===c.id);
-  m.innerHTML=`<button class="s" onclick="view.cid=null;pending=null;render()">‹ Retour</button>
-  <div class="card" style="margin-top:12px"><h2>${esc(c.name)} <span class="mu">(${st.length})</span></h2>
+  m.innerHTML=`${survCr(2)}
+  <div class="card"><h2>${esc(c.name)} <span class="mu">(${st.length})</span> <button class="s" title="Modifier le nom de la classe" onclick="renClass('${c.id}')">✏️ Modifier la classe</button></h2>
   <div class="row"><input id="n" placeholder="Nom complet"><select id="sx"><option value="M">Garçon</option><option value="F">Fille</option></select>
-  <input id="t" type="tel" placeholder="Téléphone des parents"><button onclick="addStu()">+ Ajouter</button></div>
+  <input id="t" type="tel" placeholder="Téléphone des parents (facultatif)"><button onclick="addStu()">+ Ajouter</button></div>
   <div class="row"><label class="btn s" style="border:1px solid var(--bd);color:var(--pr);background:none">📥 Importer Excel / Word<input type="file" hidden accept=".xlsx,.xls,.csv,.docx" onchange="importFile(this.files[0])"></label>
   <button class="s" onclick="tpl()">Modèle Excel</button>
   <button class="d" onclick="delClass('${c.id}')">Supprimer la classe</button></div>
@@ -458,6 +481,17 @@ function renderSurv(){
 function addClass(){const n=$('cn').value.trim();if(!n)return;
   if(db.classes.some(c=>c.owner===ow()&&(c.promo||'A')===view.promo&&c.name.toLowerCase()===n.toLowerCase()))return alert('Cette classe existe déjà');
   db.classes.push({id:uid(),owner:ow(),promo:view.promo,name:n});save();render()}
+function renClass(id){const c=db.classes.find(x=>x.id===id);if(!c)return;
+  let n=prompt('Nouveau nom de la classe :',c.name);if(n===null)return;
+  n=n.trim().replace(/\s+/g,' ');if(!n)return alert('Le nom de la classe ne peut pas être vide');if(n===c.name)return;
+  if(db.classes.some(x=>x.id!==c.id&&x.owner===c.owner&&(x.promo||'A')===(c.promo||'A')&&x.name.toLowerCase()===n.toLowerCase()))return alert('Cette classe existe déjà');
+  c.name=n;save();render()}
+function renStu(id){const s=db.students.find(x=>x.id===id);if(!s)return;
+  let n=prompt("Nouveau nom de l'élève :",s.name);if(n===null)return;
+  n=n.trim().replace(/\s+/g,' ');if(!n)return alert("Le nom de l'élève ne peut pas être vide");if(n===s.name)return;
+  const k=n.toLowerCase()+'|'+String(s.phone||'').replace(/\D/g,'');
+  if(db.students.some(x=>x.id!==s.id&&x.cid===s.cid&&x.name.toLowerCase()+'|'+String(x.phone||'').replace(/\D/g,'')===k))return alert("Un élève avec ce nom et ce téléphone existe déjà dans cette classe");
+  s.name=n;save();render()}
 function delClass(id){if(!confirm('Supprimer cette classe et tous ses élèves ?'))return;
   db.classes=db.classes.filter(c=>c.id!==id);db.students=db.students.filter(s=>s.cid!==id);view.cid=null;save();render()}
 function addStu(){
@@ -483,7 +517,7 @@ function absCard(st){
   <p class="mu">Rien de coché = présent ce jour. Utilise ◀ ou la date pour revenir à un jour précédent.</p>
   ${pdfPanel(view.cid)}
   <div class="wrap"><table><tr><th>N°</th><th>Nom complet</th><th>Sexe</th><th>Téléphone parents</th><th>Matin</th><th>Soir</th><th></th></tr>
-  ${st.map((s,i)=>{const r=day[s.id]||{};return `<tr${r.m||r.s?' style="background:rgba(192,80,74,.09)"':''}><td class="mu">${i+1}</td><td>${esc(s.name)}</td><td>${s.sex==='M'?'Garçon':'Fille'}</td><td>${esc(s.phone)}</td>
+  ${st.map((s,i)=>{const r=day[s.id]||{};return `<tr${r.m||r.s?' style="background:rgba(192,80,74,.09)"':''}><td class="mu">${i+1}</td><td>${esc(s.name)} <button class="s" title="Modifier le nom" style="padding:2px 8px" onclick="renStu('${s.id}')">✏️</button></td><td>${s.sex==='M'?'Garçon':'Fille'}</td><td>${esc(s.phone)}</td>
   <td><button class="ab am ${r.m?'on':''}" onclick="toggleAb('${s.id}','m')">Ab matin</button></td>
   <td><button class="ab as ${r.s?'on':''}" onclick="toggleAb('${s.id}','s')">Ab soir</button></td>
   <td><button class="d" onclick="delStu('${s.id}')">✕</button></td></tr>`}).join('')||'<tr><td colspan="7" class="mu">Aucun élève.</td></tr>'}</table></div></div>`}
@@ -516,7 +550,7 @@ function exportPdf(cid){
       o.n+=(r.m?1:0)+(r.s?1:0)})});
   const list=Object.values(agg).sort((x,y)=>x.c.name.localeCompare(y.c.name,'fr')||x.st.name.localeCompare(y.st.name,'fr'));
   if(!list.length)return alert('Aucune absence sur cette période.');
-  const rows=list.map(o=>[o.st.name,o.st.sex==='M'?'M':'F',o.c.name,label,o.n,o.st.phone,'','']);
+  const rows=list.map(o=>[o.st.name,o.st.sex==='M'?'M':'F',o.c.name,label,o.n,o.st.phone||'','','']);
   const doc=new window.jspdf.jsPDF({orientation:'landscape'});
   const cl=cid?db.classes.find(x=>x.id===cid):null;
   doc.setFontSize(15);doc.text('CEG1 ALLADA - Liste des absents'+(cl?' - Classe : '+cl.name:''),14,16);
@@ -537,9 +571,9 @@ function check(name,sex,phone,cid,batch=[]){
   name=String(name||'').trim().replace(/\s+/g,' ');phone=String(phone||'').trim();sex=normSex(sex);
   if(!name)return{err:'Nom manquant'};
   if(!sex)return{err:'Sexe invalide (M/F)'};
-  if(phone.replace(/\D/g,'').length<6)return{err:'Téléphone manquant ou invalide'};
+  if(phone&&phone.replace(/\D/g,'').length<6)return{err:'Téléphone invalide (laisse vide si tu ne l\'as pas)'};
   const k=name.toLowerCase()+'|'+phone.replace(/\D/g,'');
-  const dup=x=>x.name.toLowerCase()+'|'+x.phone.replace(/\D/g,'')===k;
+  const dup=x=>x.name.toLowerCase()+'|'+String(x.phone||'').replace(/\D/g,'')===k;
   if(db.students.some(s=>s.cid===cid&&dup(s))||batch.some(dup))return{err:'Doublon'};
   return{name,sex,phone};
 }
@@ -607,7 +641,7 @@ function renderSup(){
 }
 function filtered(){const q=view.q.toLowerCase();
   return db.students.map(s=>{const c=db.classes.find(c=>c.id===s.cid);return{...s,cls:c?c.name+' ('+pn(c.owner,c.promo||'A')+')':'?',owner:c?c.owner:null}})
-  .filter(s=>(!view.fs||s.owner===view.fs)&&(!view.fc||s.cid===view.fc)&&(!q||s.name.toLowerCase().includes(q)||s.phone.includes(q)))}
+  .filter(s=>(!view.fs||s.owner===view.fs)&&(!view.fc||s.cid===view.fc)&&(!q||s.name.toLowerCase().includes(q)||String(s.phone||'').includes(q)))}
 function renderRows(){const l=filtered();
   $('cnt').textContent=l.length+' élève(s)';
   $('tb').innerHTML=`<tr><th>Surveillant</th><th>Classe</th><th>Nom complet</th><th>Sexe</th><th>Téléphone parents</th></tr>`+
@@ -663,6 +697,7 @@ function bulk(cid,k){
 function telN(p){let d=String(p||'').replace(/\D/g,'');if(d.startsWith('229'))return d;if(d.length===8)d='01'+d;return '229'+d}
 function parentMsg(id,k){
   const s=db.students.find(x=>x.id===id),a=(db.abs[view.date]||{})[id];if(!s||!a)return;
+  if(!String(s.phone||'').replace(/\D/g,''))return alert('Aucun numéro de téléphone enregistré pour cet élève.');
   const w=a.m&&a.s?'toute la journée':a.m?'le matin':'le soir';
   const t=`CEG1 ALLADA : Bonjour, votre enfant ${s.name} est absent(e) ${w} le ${frD(view.date)}. Merci de nous contacter.`;
   if(k==='sms')location.href='sms:+'+telN(s.phone)+'?body='+encodeURIComponent(t);
@@ -730,7 +765,7 @@ const msgMine=m=>m.to==='all'||m.to===me.id||m.from===me.id;
 const msgTh=m=>m.to==='all'?'all':(m.from===me.id?m.to:m.from);
 function msgUnread(th){const sn=msgSeen();return(db.msgs||[]).filter(m=>msgMine(m)&&m.from!==me.id&&msgTh(m)===th&&m.t>(sn[th]||0)).length}
 function msgTotal(){if(!me)return 0;const sn=msgSeen();return(db.msgs||[]).filter(m=>msgMine(m)&&m.from!==me.id&&m.t>(sn[msgTh(m)]||0)).length}
-function msgBadge(){const n=msgTotal();document.title=(n?'('+n+') ':'')+'CEG1 ALLADA - Gestion des élèves';document.querySelectorAll('.mbd').forEach(e=>{e.textContent=n||'';e.style.display=n?'inline-block':'none'})}
+function msgBadge(){const n=msgTotal();document.title=(n?'('+n+') ':'')+'CEG1 ALLADA - Gestion Présence/Absence des élèves';document.querySelectorAll('.mbd').forEach(e=>{e.textContent=n||'';e.style.display=n?'inline-block':'none'})}
 function msgPaint(first){
   const el=$('mlist');if(!el||!me)return;
   const th=view.mt||'all',nm=id=>(db.users.find(u=>u.id===id)||{name:'?'}).name,p=n=>String(n).padStart(2,'0');
@@ -772,7 +807,7 @@ function msgDel(id){
 function msgPage(){
   view.mt=view.mt||'all';
   const opts=[['all','👥 Tout le monde']].concat(db.users.filter(u=>u.id!==me.id).map(u=>[u.id,u.name]));
-  return `<main><button class="s" onclick="go('app')">‹ Retour</button><div class="card" style="margin-top:12px;max-width:640px"><h2>💬 Messagerie</h2>
+  return `<main>${crumbs([...baseCr(),['Messagerie',null]])}<div class="card" style="max-width:640px"><h2>💬 Messagerie</h2>
   <div style="display:flex;justify-content:space-between;align-items:center;gap:8px;margin:-6px 0 10px;flex-wrap:wrap"><span></span><button class="s" id="msnd" onclick="msgSnd()" style="padding:4px 10px;font-size:12px">${sndOn()?'🔔 Son activé':'🔕 Son coupé'}</button></div>
   <select id="mw" onchange="view.mt=this.value;msgPaint(1)" style="width:100%;margin-bottom:10px">${opts.map(([v,n])=>{const c=msgUnread(v);return `<option value="${esc(v)}"${v===view.mt?' selected':''}>${esc(n)}${c?' ('+c+' nouveau'+(c>1?'x':'')+')':''}</option>`}).join('')}</select>
   <div id="mlist" class="mlist"></div>
