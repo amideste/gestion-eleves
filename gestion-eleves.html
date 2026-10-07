@@ -362,7 +362,7 @@ function render0(){
     <div id="zone" style="min-height:0"></div>
     <div class="pub"><div class="pub-t"><span class="pub-i">✨</span> CONCEPTEUR &amp; CONSTRUCTEUR</div><div class="pub-n">MODESTE AMIKPÉMI</div><p class="pub-d">Ingénierie de logiciels sur-mesure &amp; applications sécurisées.</p><a class="pub-w" href="https://wa.me/2290195185256" target="_blank" rel="noopener">💬 WhatsApp : +229 01 95 18 52 56</a></div></div>`;
   }
-  const hd=`<header><b>📚 ${esc(me.name)}</b><span><button class="s mg" onclick="go('msg')" title="Messagerie">💬<span class="mbd" style="display:${msgTotal()?'inline-block':'none'}">${msgTotal()||''}</span></button> <button class="s" onclick="go('mycode')">🔑 Mon code</button> <button class="s" onclick="logout()">Déconnexion</button></span></header>`;
+  const hd=`<header><b>📚 ${esc(me.name)}</b><span><button class="s mg" onclick="go('msg')" title="Messagerie">💬<span class="mbd" style="display:${msgTotal()?'inline-block':'none'}">${msgTotal()||''}</span></button> <button class="s" onclick="go('sync')" title="Synchronisation">🔄</button> <button class="s" onclick="go('mycode')">🔑 Mon code</button> <button class="s" onclick="logout()">Déconnexion</button></span></header>`;
   if(view.page==='msg')return a.innerHTML=hd+msgPage();
   if(view.page==='sync')return a.innerHTML=hd+syPage("go('app')");
   if(view.page==='mycode')return a.innerHTML=hd+`<main><div class="card" style="max-width:420px"><h2>Mon code</h2>
