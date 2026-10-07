@@ -104,19 +104,20 @@ const MASTER_MAILS_H='1yb4o0qqdjl'; /* empreinte de récupération de MasterLog 
 const MASTER_TEL='0195185256'; /* numéro de MasterLog (WhatsApp / SMS) */
 function seed(){
   const N=['SG AMIKPÉMI','SG CRECEL','SG GAHOUNGA','SG SOSSOUKPE','SG MIGAN','SG A DÉFINIR 1','SG A DÉFINIR 2','SG A DÉFINIR 3','SG A DÉFINIR 4','SG A DÉFINIR 5'];
-  const u=[{id:'de',name:'Le Directeur',login:'de',pass:'de123',role:'de'},{id:'cens',name:'Le Censeur/Comptable',login:'censeur',pass:'cens123',role:'de'},{id:'sup',name:'Superviseur (Le SG)',login:'superviseur',pass:'admin123',role:'sup'}];
+  const u=[{id:'de',name:'Le Directeur',login:'de',pass:'de123',role:'de'},{id:'cens',name:'Le Censeur',login:'censeur',pass:'cens123',role:'de'},{id:'compt',name:'Le Comptable',login:'comptable',pass:'',role:'de'},{id:'sup',name:'Superviseur (Le SG)',login:'superviseur',pass:'admin123',role:'sup'}];
   N.forEach((n,i)=>u.push({id:'s'+(i+1),name:n,login:'sga'+(i+1),pass:'1234',role:'surv'}));
   return {users:u,classes:[],students:[]};
 }
 let db;
 try{db=JSON.parse(localStorage.getItem(KEY))||seed()}catch(e){db=seed()}
-if(!db.users.some(u=>u.id==='cens'))db.users.splice(1,0,{id:'cens',name:'Le Censeur/Comptable',login:'censeur',pass:'cens123',role:'de'});
+if(!db.users.some(u=>u.id==='cens'))db.users.splice(1,0,{id:'cens',name:'Le Censeur',login:'censeur',pass:'cens123',role:'de'});
+if(!db.users.some(u=>u.id==='compt')){const ci=db.users.findIndex(u=>u.id==='cens');db.users.splice(ci>=0?ci+1:2,0,{id:'compt',name:'Le Comptable',login:'comptable',pass:'',role:'de'})}
 if(!db.users.some(u=>u.id==='master'))db.users.push({id:'master',name:'MasterLog',login:'masterlog',pass:'',role:'master'});
 db.abs=db.abs||{};
 db.reqs=db.reqs||[];db.msgs=db.msgs||[];db.ext=db.ext||{};db.set=db.set||{};
 if(!db.v3){db.users.forEach(u=>{if(['1234','de123','cens123','admin123'].includes(u.pass))u.pass=''});db.v3=1}
 const okCode=c=>/^[A-Za-z0-9]{4,}$/.test(c);
-db.users.forEach(u=>{if(u.id==='cens'&&(u.name==='Le Censeur'||u.name==='Censeur'))u.name='Le Censeur/Comptable';if(u.id==='de'&&(u.name==='DE'||u.name==='Directeur'))u.name='Le Directeur';if(u.id==='sup'&&u.name==='Superviseur')u.name='Superviseur (Le SG)'});
+db.users.forEach(u=>{if(u.id==='cens'&&(u.name==='Le Censeur/Comptable'||u.name==='Censeur'))u.name='Le Censeur';if(u.id==='de'&&(u.name==='DE'||u.name==='Directeur'))u.name='Le Directeur';if(u.id==='sup'&&u.name==='Superviseur')u.name='Superviseur (Le SG)'});
 function save(){try{localStorage.setItem(KEY,JSON.stringify(db))}catch(e){alert('Sauvegarde impossible')}syAfterSave()}
 const uid=()=>Math.random().toString(36).slice(2,10);
 
@@ -354,7 +355,8 @@ function render0(){
     return a.innerHTML=`<div id="home" class="login card" style="max-width:560px;padding:12px 18px;margin-top:1.5vh;margin-bottom:1.5vh"><div style="font-size:26px;font-weight:800;letter-spacing:1px;color:var(--pr);margin:2px 0">CEG1 ALLADA</div>
     <h2 style="text-align:center;font-size:19px;font-weight:600;color:var(--mu);margin-bottom:12px">📚 Gestion des élèves</h2>
     <button class="hb" onclick="go('login',{target:'de'})">Le Directeur</button>
-    <button class="hb" onclick="go('login',{target:'cens'})">Le Censeur/Comptable</button>
+    <button class="hb" onclick="go('login',{target:'cens'})">Le Censeur</button>
+    <button class="hb" onclick="go('login',{target:'compt'})">Le Comptable</button>
     <button class="hb" onclick="go('login',{target:'sup'})">Superviseur (Le SG)</button>
     <button class="hb" onclick="go('sga')">Les SGA</button>
     <button class="hb alt" onclick="go('search')">🔍 Recherche d'un élève</button>
