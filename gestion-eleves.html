@@ -4,7 +4,7 @@
 <meta charset="utf-8">
 <meta name="viewport" content="width=device-width, initial-scale=1">
 <meta name="color-scheme" content="light">
-<title>CEG1 ALLADA - Gestion Présence/Absence des élèves</title>
+<title>CEG1 ALLADA - Gestion Présence/Absence Elv-Prof</title>
 <script src="https://cdnjs.cloudflare.com/ajax/libs/xlsx/0.18.5/xlsx.full.min.js"></script>
 <script src="https://cdnjs.cloudflare.com/ajax/libs/jspdf/2.5.1/jspdf.umd.min.js"></script>
 <script src="https://cdnjs.cloudflare.com/ajax/libs/jspdf-autotable/3.8.2/jspdf.plugin.autotable.min.js"></script>
@@ -120,7 +120,7 @@ if(!db.users.some(u=>u.id==='cens'))db.users.splice(1,0,{id:'cens',name:'Le Cens
 if(!db.users.some(u=>u.id==='compt')){const ci=db.users.findIndex(u=>u.id==='cens');db.users.splice(ci>=0?ci+1:2,0,{id:'compt',name:'Le Comptable',login:'comptable',pass:'',role:'de'})}
 if(!db.users.some(u=>u.id==='master'))db.users.push({id:'master',name:'MasterLog',login:'masterlog',pass:'',role:'master'});
 db.abs=db.abs||{};
-db.reqs=db.reqs||[];db.msgs=db.msgs||[];db.ext=db.ext||{};db.set=db.set||{};
+db.reqs=db.reqs||[];db.msgs=db.msgs||[];db.ext=db.ext||{};db.set=db.set||{};db.profs=db.profs||[];db.pabs=db.pabs||{};
 if(!db.v3){db.users.forEach(u=>{if(['1234','de123','cens123','admin123'].includes(u.pass))u.pass=''});db.v3=1}
 const okCode=c=>/^[A-Za-z0-9]{4,}$/.test(c);
 db.users.forEach(u=>{if(u.id==='cens'&&(u.name==='Le Censeur/Comptable'||u.name==='Censeur'))u.name='Le Censeur';if(u.id==='de'&&(u.name==='DE'||u.name==='Directeur'))u.name='Le Directeur';if(u.id==='sup'&&u.name==='Superviseur')u.name='Superviseur (Le SG)'});
@@ -155,8 +155,9 @@ function syFlat(){
   (db.students||[]).forEach(o=>f['students/'+o.id]=JSON.stringify(o));
   (db.reqs||[]).forEach(o=>f['reqs/'+o.u]=JSON.stringify(o));
   (db.msgs||[]).forEach(o=>f['msgs/'+o.id]=JSON.stringify(o));
+  (db.profs||[]).forEach(o=>f['profs/'+o.id]=JSON.stringify(o));
   Object.entries(db.set||{}).forEach(([k,v])=>f['set/'+k]=JSON.stringify(v));
-  ['abs','ext'].forEach(n=>Object.entries(db[n]||{}).forEach(([d,day])=>Object.entries(day||{}).forEach(([sid,r])=>f[n+'/'+d+'/'+sid]=JSON.stringify(r))));
+  ['abs','ext','pabs'].forEach(n=>Object.entries(db[n]||{}).forEach(([d,day])=>Object.entries(day||{}).forEach(([sid,r])=>f[n+'/'+d+'/'+sid]=JSON.stringify(r))));
   return f}
 function syDiff(){
   const f=syFlat(),n=syT();let ch=0;
@@ -165,11 +166,11 @@ function syDiff(){
   return ch}
 function syApply(k,s){
   const p=k.split('/'),t=p[0];
-  if(t==='users'||t==='classes'||t==='students'||t==='reqs'||t==='msgs'){
+  if(t==='users'||t==='classes'||t==='students'||t==='reqs'||t==='msgs'||t==='profs'){
     const idk=t==='reqs'?'u':'id',a=db[t]=db[t]||[],i=a.findIndex(o=>o[idk]===p[1]);
     if(s===null){if(i>=0)a.splice(i,1)}else{const o=JSON.parse(s);if(t==='msgs'&&i<0&&me&&o.from!==me.id&&(o.to==='all'||o.to===me.id))syNew++;if(i>=0)a[i]=o;else a.push(o)}
   }else if(t==='set'){db.set=db.set||{};if(s===null)delete db.set[p[1]];else db.set[p[1]]=JSON.parse(s)}
-  else if(t==='abs'||t==='ext'){
+  else if(t==='abs'||t==='ext'||t==='pabs'){
     const m=db[t]=db[t]||{};
     if(s===null){if(m[p[1]]){delete m[p[1]][p[2]];if(!Object.keys(m[p[1]]).length)delete m[p[1]]}}
     else(m[p[1]]=m[p[1]]||{})[p[2]]=JSON.parse(s)}}
@@ -381,7 +382,7 @@ function render0(){
       <button style="width:100%" onclick="setupCode()">Créer mon code</button><button class="s" style="width:100%;margin-top:8px" onclick="go('${u.role==='surv'?'sga':'home'}')">Retour</button></div>`;
       return a.innerHTML=`<div class="login card">${lcr(u,[[esc(u.name),null]])}<h2>${esc(u.name)}</h2><input id="lg" value="${esc(u.login)}" autocapitalize="none"><input id="pw" type="password" placeholder="Mot de passe"><button style="width:100%" onclick="login()">Se connecter</button><button class="s" style="width:100%;margin-top:8px" onclick="go('forgot',{target:'${u.id}'})">Code oublié ?</button><button class="s" style="width:100%;margin-top:8px" onclick="go('${u.role==='surv'?'sga':'home'}')">Retour</button></div>`}
     return a.innerHTML=`<div id="home" class="login card" style="max-width:560px;padding:12px 18px;margin-top:1.5vh;margin-bottom:1.5vh"><div style="font-size:26px;font-weight:800;letter-spacing:1px;color:var(--pr);margin:2px 0">CEG1 ALLADA</div>
-    <h2 style="text-align:center;font-size:19px;font-weight:600;color:var(--mu);margin-bottom:12px">📚 Gestion Présence/Absence des élèves</h2>
+    <h2 style="text-align:center;font-size:19px;font-weight:600;color:var(--mu);margin-bottom:12px;line-height:1.35">📚 Gestion Présence/Absence Elv-Prof</h2>
     <button class="hb" onclick="go('login',{target:'de'})">Le Directeur</button>
     <button class="hb" onclick="go('login',{target:'cens'})">Le Censeur</button>
     <button class="hb" onclick="go('login',{target:'compt'})">Le Comptable</button>
@@ -433,7 +434,7 @@ function resetCode(){
 function askReset(k){
   const u=db.users.find(x=>x.id===view.target);if(!u||u.blocked)return;
   db.reqs=(db.reqs||[]).filter(r=>r.u!==u.id);db.reqs.push({u:u.id,t:Date.now()});save();
-  const txt='CEG1 ALLADA - Gestion Présence/Absence des élèves : '+u.name+' (identifiant : '+u.login+') a oublié son code. Merci de le réinitialiser.';
+  const txt='CEG1 ALLADA - Gestion Présence/Absence Elv-Prof : '+u.name+' (identifiant : '+u.login+') a oublié son code. Merci de le réinitialiser.';
   if(k==='sms')location.href='sms:+229'+MASTER_TEL+'?body='+encodeURIComponent(txt);
   else window.open('https://wa.me/229'+MASTER_TEL+'?text='+encodeURIComponent(txt),'_blank');
   alert('Demande enregistrée pour MasterLog. Si le message ne s\'est pas ouvert, appelle MasterLog au '+MASTER_TEL+'.')}
@@ -641,12 +642,186 @@ function tpl(){const ws=XLSX.utils.aoa_to_sheet([['Nom complet','Sexe','Téléph
   const wb=XLSX.utils.book_new();XLSX.utils.book_append_sheet(wb,ws,'Élèves');XLSX.writeFile(wb,'modele-import-eleves.xlsx')}
 
 /* ===== Superviseur ===== */
+/* ===== Gestion des professeurs (Directeur et Censeur) ===== */
+const SUBJ=['Français','Anglais','Hist-Géo','Philosophie','Espagnol','Allemand','Maths','SVT','PCT','Économie','EPS','Informatique'];
+const canProf=()=>!!(me&&(me.id==='de'||me.id==='cens'||me.role==='master'));
+function openSubj(i){if(!canProf())return;view.subj=SUBJ[i];render()}
+function profsPage(){profsPage0();profPreview();profSearch();pxExtras()}
+function profsPage0(){
+  const sb=$('sb'),P=db.profs||[];
+  if(!view.subj||!SUBJ.includes(view.subj)){
+    view.date=view.date||today();
+    sb.innerHTML=`<div class="card"><h2>Gestion des Professeurs</h2>
+    <div class="row"><button class="s" onclick="shiftDate(-1)">◀</button><input type="date" value="${view.date}" max="${today()}" onchange="setDate(this.value)"><button class="s" onclick="shiftDate(1)" ${view.date>=today()?'disabled':''}>▶</button><span class="mu">Date de l'absence</span></div>
+    <input id="psq" type="search" placeholder="🔍 Rechercher un professeur (nom)" value="${esc(view.pq||'')}" oninput="view.pq=this.value;profSearch()" style="width:100%;margin:6px 0 10px">
+    <div id="psr"></div>
+    <h3 style="margin:16px 0 6px">Matières : créer ou importer des professeurs</h3>
+    ${SUBJ.map((x,i)=>`<div class="cls" onclick="openSubj(${i})"><b>${esc(x)}</b><span class="mu">${P.filter(p=>p.subj===x).length} professeur(s) ›</span></div>`).join('')}${profPdfPanel(0)}</div>`;
+    return}
+  const l=P.filter(p=>p.subj===view.subj);
+  view.date=view.date||today();const day=(db.pabs||{})[view.date]||{},na=l.filter(p=>day[p.id]).length;
+  const bt=(id,k,t,r)=>`<button class="ab ${r[k]?'on':''}" onclick="togProf('${id}','${k}')">${t}</button>`;
+  sb.innerHTML=`<div class="card"><div class="row"><button class="s" onclick="view.subj=null;render()">‹ Matières</button></div>
+  <h2>${esc(view.subj)} <span class="mu">(${l.length})</span></h2>
+  <div class="row"><input id="pfn" placeholder="Nom complet du professeur" onkeydown="if(event.key==='Enter')addProf()"><input id="pft" type="tel" placeholder="Téléphone (facultatif)"><button onclick="addProf()">+ Créer</button></div>
+  <div class="row"><label class="btn s" style="border:1px solid var(--bd);color:var(--pr);background:none">📥 Importer Excel / Word<input type="file" hidden accept=".xlsx,.xls,.csv,.docx" onchange="importProfs(this.files[0]);this.value=''"></label><button class="s" onclick="tplProf()">Modèle Excel</button></div>
+  <div class="row"><button class="s" onclick="shiftDate(-1)">◀</button><input type="date" value="${view.date}" max="${today()}" onchange="setDate(this.value)"><button class="s" onclick="shiftDate(1)" ${view.date>=today()?'disabled':''}>▶</button><span class="mu">${na} absent(s) sur ${l.length}</span></div>
+  <p class="mu">Rien de coché = présent ce jour. « Absent » = absent toute la journée.</p>
+  ${profPdfPanel(1)}
+  <div class="wrap"><table><tr><th>N°</th><th>Nom complet</th><th>Téléphone</th><th>Matin 1</th><th>Matin 2</th><th>Soir 1</th><th>Soir 2</th><th>Journée</th><th>Motif</th><th>Observation</th><th></th></tr>
+  ${l.map((p,i)=>{const r=day[p.id]||{},all=r.m1&&r.m2&&r.s1&&r.s2;return `<tr${day[p.id]?' style="background:rgba(192,80,74,.09)"':''}><td class="mu">${i+1}</td><td>${esc(p.name)}</td><td>${esc(p.phone||'')}</td>
+  <td>${bt(p.id,'m1','Ab matin 1',r)}</td><td>${bt(p.id,'m2','Ab matin 2',r)}</td><td>${bt(p.id,'s1','Ab soir 1',r)}</td><td>${bt(p.id,'s2','Ab soir 2',r)}</td>
+  <td><button class="ab ${all?'on':''}" onclick="togProf('${p.id}','all')">Absent</button></td>
+  <td>${profFld(p.id,day[p.id],'motif','Motif')}</td><td>${profFld(p.id,day[p.id],'obs','Observation')}</td>
+  <td><button class="s" title="Modifier" onclick="renProf('${p.id}')">✏️</button> <button class="d" title="Supprimer" onclick="delProf('${p.id}')">🗑</button></td></tr>`}).join('')||'<tr><td colspan="11" class="mu">Aucun professeur dans cette matière.</td></tr>'}</table></div></div>`}
+function togProf(id,k){if(!canProf())return;
+  db.pabs=db.pabs||{};const d=db.pabs[view.date]=db.pabs[view.date]||{},r=d[id]=d[id]||{};
+  if(k==='all'){const all=r.m1&&r.m2&&r.s1&&r.s2;['m1','m2','s1','s2'].forEach(x=>r[x]=!all)}else r[k]=!r[k];
+  if(!r.m1&&!r.m2&&!r.s1&&!r.s2)delete d[id];if(!Object.keys(d).length)delete db.pabs[view.date];
+  save();const y=scrollY;render();scrollTo(0,y)}
+/* ===== Import / PDF des professeurs ===== */
+function tplProf(){if(!window.XLSX)return alert('Module Excel non chargé. Vérifie ta connexion internet.');
+  const ws=XLSX.utils.aoa_to_sheet([['Nom complet','Téléphone (facultatif)'],['Nom Prénom','0100000000']]);
+  const wb=XLSX.utils.book_new();XLSX.utils.book_append_sheet(wb,ws,'Professeurs');XLSX.writeFile(wb,'modele-import-professeurs.xlsx')}
+async function importProfs(f){
+  if(!f||!canProf()||!view.subj)return;let rows=[];
+  try{
+    const buf=await f.arrayBuffer();
+    if(/\.docx$/i.test(f.name)){
+      if(!window.mammoth)return alert('Module Word non chargé. Vérifie ta connexion internet.');
+      const h=(await mammoth.convertToHtml({arrayBuffer:buf})).value,d=new DOMParser().parseFromString(h,'text/html');
+      d.querySelectorAll('tr').forEach(tr=>rows.push([...tr.children].map(td=>td.textContent.trim())));
+      if(!rows.length)d.querySelectorAll('p,li').forEach(e=>rows.push([e.textContent.trim()]));
+    }else{
+      if(!window.XLSX)return alert('Module Excel non chargé. Vérifie ta connexion internet.');
+      const wb=XLSX.read(buf,{type:'array'});
+      rows=XLSX.utils.sheet_to_json(wb.Sheets[wb.SheetNames[0]],{header:1,raw:false,defval:''});
+    }
+  }catch(e){return alert('Fichier illisible : '+e.message)}
+  rows=rows.filter(r=>r.some(x=>String(x).trim()));
+  if(rows.length&&/^(n°|no|nom)/i.test(String(rows[0][0]).trim()))rows.shift();
+  db.profs=db.profs||[];const add=[];let skip=0;
+  rows.forEach(r=>{
+    const n=String(r[0]||'').trim().replace(/\s+/g,' ');let t=String(r[1]||'').trim();
+    if(!n)return void skip++;
+    if(t.replace(/\D/g,'').length<6)t='';
+    if(db.profs.some(p=>p.subj===view.subj&&nz(p.name)===nz(n))||add.some(p=>nz(p.name)===nz(n)))return void skip++;
+    add.push({id:uid(),subj:view.subj,name:n,phone:t})});
+  if(!add.length)return alert('Aucun professeur à importer'+(skip?' ('+skip+' ligne(s) vide(s) ou déjà existante(s)).':'.'));
+  if(!confirm('Importer '+add.length+' professeur(s) dans « '+view.subj+' » ?'+(skip?'\n'+skip+' ligne(s) ignorée(s) (vides ou déjà existantes).':'')))return;
+  add.forEach(o=>db.profs.push(o));save();render()}
+const profPdfPanel=one=>`<div class="row" style="margin-top:10px;padding-top:10px;border-top:1px solid var(--bd)"><b>📄 PDF des professeurs absents</b>
+<select id="prs" onchange="profPreview()"><option value="">Toutes les matières</option>${SUBJ.map(x=>`<option value="${esc(x)}"${one&&view.subj===x?' selected':''}>${esc(x)}</option>`).join('')}</select>
+<select id="prp" onchange="profPreview()"><option value="s">Par semaine</option><option value="m">Par mois</option><option value="p">Période définie</option></select>
+<input type="date" id="prd" value="${view.date||today()}" max="${today()}" title="Date de référence" onchange="profPreview()">
+<span class="mu">Période :</span><input type="date" id="prd1" onchange="profPreview()"><input type="date" id="prd2" onchange="profPreview()">
+<button onclick="exportProfPdf()">Télécharger</button></div>
+<p class="mu">Choisis une matière, ou « Toutes les matières » pour tout télécharger d'un seul coup. Semaine et mois sont calculés à partir de la date de référence ; « Période définie » utilise les champs du / au.</p>
+<div id="prv"></div>`;
+function profSlotTxt(r){const L=[['m1','Ab Matin 1'],['m2','Ab Matin 2'],['s1','Ab Soir 1'],['s2','Ab Soir 2']].filter(([k])=>r[k]).map(x=>x[1]);return L.length===4?'Absent (journée)':L.join(', ')}
+function setProfField(id,k,v){if(!canProf())return;const r=((db.pabs||{})[view.date]||{})[id];if(!r)return;r[k]=String(v||'').trim();save()}
+function profFld(id,r,k,ph){return r?`<input value="${esc(r[k]||'')}" placeholder="${ph}" onchange="setProfField('${id}','${k}',this.value)" style="min-width:130px;width:100%">`:'<span class="mu">—</span>'}
+function profSearch(){
+  const el=$('psr');if(!el||!$('psq'))return;
+  const q=nz((view.pq||'').trim()),day=(db.pabs||{})[view.date]||{};
+  const l=(db.profs||[]).filter(p=>!q||nz(p.name).includes(q));
+  const bt=(id,k,t,r)=>`<button class="ab ${r[k]?'on':''}" onclick="togProf('${id}','${k}')">${t}</button>`;
+  let h=`<p class="mu" style="margin:4px 0 8px">${l.length} professeur(s)${q?' trouvé(s)':' au total'} · clique sur un professeur pour marquer son absence le ${frD(view.date)}</p>`;
+  SUBJ.forEach(sj=>{
+    const g=l.filter(p=>p.subj===sj).sort((x,y)=>x.name.localeCompare(y.name,'fr'));if(!g.length)return;
+    h+=`<div style="margin:12px 0 6px;font-weight:700;color:var(--pr)">${esc(sj)} <span class="mu">(${g.length})</span></div>`;
+    g.forEach(p=>{
+      const r=day[p.id],open=view.pid===p.id;
+      h+=`<div class="cls" style="flex-wrap:wrap;margin-bottom:${open?0:10}px;${r?'background:rgba(192,80,74,.09)':''}" onclick="view.pid=(view.pid==='${p.id}'?null:'${p.id}');profSearch()">
+      <div><b>${esc(p.name)}</b>${p.phone?'<br><span class="mu">'+esc(p.phone)+'</span>':''}</div>
+      <span class="mu">${r?'<b style="color:#c0504a">'+esc(profSlotTxt(r))+'</b> ':''}${open?'▲':'▼'}</span></div>`;
+      if(open){const rr=r||{},all=rr.m1&&rr.m2&&rr.s1&&rr.s2;
+        h+=`<div class="card" style="margin:0 0 10px;padding:12px">
+        <div class="row" style="margin:0 0 8px">${bt(p.id,'m1','Ab matin 1',rr)}${bt(p.id,'m2','Ab matin 2',rr)}${bt(p.id,'s1','Ab soir 1',rr)}${bt(p.id,'s2','Ab soir 2',rr)}<button class="ab ${all?'on':''}" onclick="togProf('${p.id}','all')">Absent</button></div>
+        ${r?`<div class="row" style="margin:0">${profFld(p.id,r,'motif','Motif')}${profFld(p.id,r,'obs','Observation')}</div>`:'<p class="mu" style="margin:0">Coche une absence pour saisir le motif et l\'observation.</p>'}</div>`}
+    })});
+  el.innerHTML=l.length?h:'<p class="mu">Aucun professeur trouvé.</p>'}
+function profAbsList(sj,a,b){
+  const rows=[];
+  Object.keys(db.pabs||{}).filter(d=>d>=a&&d<=b).forEach(d=>Object.entries(db.pabs[d]).forEach(([pid,r])=>{
+    const p=(db.profs||[]).find(x=>x.id===pid);if(!p||(sj&&p.subj!==sj)||!(r.m1||r.m2||r.s1||r.s2))return;
+    rows.push({d,p,type:profSlotTxt(r),motif:r.motif||'',obs:r.obs||'',f:{m1:!!r.m1,m2:!!r.m2,s1:!!r.s1,s2:!!r.s2}})}));
+  return rows.sort((x,y)=>x.d.localeCompare(y.d)||SUBJ.indexOf(x.p.subj)-SUBJ.indexOf(y.p.subj)||x.p.name.localeCompare(y.p.name,'fr'))}
+function profSummary(list){
+  const m={};
+  list.forEach(o=>{const t=m[o.p.id]=m[o.p.id]||{p:o.p,m1:0,m2:0,s1:0,s2:0,days:new Set()};
+    ['m1','m2','s1','s2'].forEach(k=>{if(o.f[k])t[k]++});t.days.add(o.d)});
+  const rows=Object.values(m).map(t=>({p:t.p,m1:t.m1,m2:t.m2,s1:t.s1,s2:t.s2,total:t.m1+t.m2+t.s1+t.s2,days:t.days.size}))
+    .sort((x,y)=>SUBJ.indexOf(x.p.subj)-SUBJ.indexOf(y.p.subj)||x.p.name.localeCompare(y.p.name,'fr'));
+  const tot=rows.reduce((a,r)=>({m1:a.m1+r.m1,m2:a.m2+r.m2,s1:a.s1+r.s1,s2:a.s2+r.s2,total:a.total+r.total,days:a.days+r.days}),{m1:0,m2:0,s1:0,s2:0,total:0,days:0});
+  return{rows,tot}}
+function profPreview(){
+  const el=$('prv');if(!el||!$('prp'))return;
+  const [a,b,label]=profRange();
+  if(!a||!b||a>b){el.innerHTML='<p class="mu">Choisis une période valide pour voir la liste.</p>';return}
+  const sj=$('prs').value,list=profAbsList(sj,a,b),np=new Set(list.map(o=>o.p.id)).size;
+  el.innerHTML=`<p style="margin:10px 0 6px"><b>${esc(label)}</b> · ${np} professeur(s) absent(s) · ${list.length} absence(s)${sj?' · '+esc(sj):''}</p>
+  <div class="wrap"><table><tr><th>Date</th><th>Nom complet</th><th>Matière</th><th>Téléphone</th><th>Type d'absence</th><th>Motif</th><th>Observation</th></tr>
+  ${list.map(o=>`<tr><td>${frD(o.d)}</td><td>${esc(o.p.name)}</td><td>${esc(o.p.subj)}</td><td>${esc(o.p.phone||'')}</td><td>${esc(o.type)}</td><td>${esc(o.motif)}</td><td>${esc(o.obs)}</td></tr>`).join('')||'<tr><td colspan="7" class="mu">Aucun professeur absent sur cette période.</td></tr>'}</table></div>
+  ${list.length?(()=>{const S=profSummary(list);return `<p style="margin:14px 0 6px"><b>Résumé par professeur</b> <span class="mu">(nombre d'absences par type coché)</span></p>
+  <div class="wrap"><table><tr><th>Nom complet</th><th>Matière</th><th>Ab Matin 1</th><th>Ab Matin 2</th><th>Ab Soir 1</th><th>Ab Soir 2</th><th>Total</th><th>Jours</th></tr>
+  ${S.rows.map(r=>`<tr><td>${esc(r.p.name)}</td><td>${esc(r.p.subj)}</td><td>${r.m1}</td><td>${r.m2}</td><td>${r.s1}</td><td>${r.s2}</td><td><b>${r.total}</b></td><td>${r.days}</td></tr>`).join('')}
+  <tr style="font-weight:700"><td colspan="2">TOTAL</td><td>${S.tot.m1}</td><td>${S.tot.m2}</td><td>${S.tot.s1}</td><td>${S.tot.s2}</td><td>${S.tot.total}</td><td>${S.tot.days}</td></tr></table></div>`})():''}`}
+function profRange(){
+  const t=$('prp').value,ref=$('prd').value||today(),d=new Date(ref+'T12:00:00');
+  if(t==='s'){const a=new Date(d);a.setDate(d.getDate()-(d.getDay()+6)%7);const b=new Date(a);b.setDate(a.getDate()+6);return[fmtD(a),fmtD(b),'Semaine du '+frD(fmtD(a))+' au '+frD(fmtD(b))]}
+  if(t==='m'){const a=fmtD(new Date(d.getFullYear(),d.getMonth(),1)),b=fmtD(new Date(d.getFullYear(),d.getMonth()+1,0));return[a,b,'Mois : '+d.toLocaleDateString('fr-FR',{month:'long',year:'numeric'})]}
+  const a=$('prd1').value,b=$('prd2').value;
+  return[a,b,'Du '+(a?frD(a):'?')+' au '+(b?frD(b):'?')]}
+function exportProfPdf(){
+  if(!canProf())return;
+  if(!window.jspdf)return alert('Module PDF non chargé. Vérifie ta connexion internet.');
+  const [a,b,label]=profRange();
+  if(!a||!b||a>b)return alert('Choisis une période valide (date de début avant la date de fin).');
+  const sj=$('prs').value,list=profAbsList(sj,a,b);
+  if(!list.length)return alert('Aucune absence de professeur sur cette période.');
+  const np=new Set(list.map(o=>o.p.id)).size,doc=new window.jspdf.jsPDF({orientation:'landscape'});
+  doc.setFontSize(15);doc.text('CEG1 ALLADA - Professeurs absents'+(sj?' - '+sj:''),14,16);
+  doc.setFontSize(10);doc.text(label,14,23);doc.text(np+' professeur(s) absent(s) - '+list.length+' absence(s)',14,29);
+  const head=['Date','Nom complet'].concat(sj?[]:['Matière']).concat(['Téléphone',"Type d'absence",'Motif','Observation']);
+  const body=list.map(o=>[frD(o.d),o.p.name].concat(sj?[]:[o.p.subj]).concat([o.p.phone||'',o.type,o.motif,o.obs]));
+  doc.autoTable({startY:34,head:[head],body,
+    styles:{fontSize:9,cellPadding:2.5,valign:'middle',lineColor:[150,150,150],lineWidth:.1,minCellHeight:10},
+    headStyles:{fillColor:[36,87,214],halign:'center'}});
+  const S=profSummary(list);let y=doc.lastAutoTable.finalY+10;
+  if(y>170){doc.addPage();y=16}
+  doc.setFontSize(12);doc.text('Résumé par professeur (nombre d\'absences par type coché)',14,y);
+  doc.autoTable({startY:y+4,
+    head:[['Nom complet'].concat(sj?[]:['Matière']).concat(['Ab Matin 1','Ab Matin 2','Ab Soir 1','Ab Soir 2','Total créneaux','Jours'])],
+    body:S.rows.map(r=>[r.p.name].concat(sj?[]:[r.p.subj]).concat([r.m1,r.m2,r.s1,r.s2,r.total,r.days]))
+      .concat([[{content:'TOTAL',colSpan:sj?1:2,styles:{fontStyle:'bold'}},S.tot.m1,S.tot.m2,S.tot.s1,S.tot.s2,S.tot.total,S.tot.days]]),
+    styles:{fontSize:9,cellPadding:2.5,halign:'center',valign:'middle',lineColor:[150,150,150],lineWidth:.1},
+    headStyles:{fillColor:[36,87,214]},
+    columnStyles:{0:{halign:'left'}}});
+  doc.save('professeurs_absents_'+(sj?sj.replace(/\s+/g,'_')+'_':'')+a+'_'+b+'.pdf')}
+
+function addProf(){if(!canProf()||!view.subj)return;
+  const n=($('pfn').value||'').trim().replace(/\s+/g,' '),t=($('pft').value||'').trim();
+  if(!n)return alert('Le nom du professeur ne peut pas être vide');
+  if((db.profs||[]).some(p=>p.subj===view.subj&&nz(p.name)===nz(n)))return alert('Ce professeur existe déjà dans cette matière');
+  db.profs=db.profs||[];db.profs.push({id:uid(),subj:view.subj,name:n,phone:t});save();render()}
+function renProf(id){if(!canProf())return;const p=(db.profs||[]).find(x=>x.id===id);if(!p)return;
+  let n=prompt('Nouveau nom du professeur :',p.name);if(n===null)return;
+  n=n.trim().replace(/\s+/g,' ');if(!n)return alert('Le nom ne peut pas être vide');
+  if(db.profs.some(x=>x.id!==id&&x.subj===p.subj&&nz(x.name)===nz(n)))return alert('Ce professeur existe déjà dans cette matière');
+  const t=prompt('Téléphone (facultatif) :',p.phone||'');if(t===null)return;
+  p.name=n;p.phone=t.trim();save();render()}
+function delProf(id){if(!canProf())return;const p=(db.profs||[]).find(x=>x.id===id);
+  if(!p||!confirm('Supprimer le professeur « '+p.name+' » ('+p.subj+') ?'))return;
+  db.profs=db.profs.filter(x=>x.id!==id);Object.keys(db.pabs||{}).forEach(d=>{delete db.pabs[d][id];if(!Object.keys(db.pabs[d]).length)delete db.pabs[d]});save();render()}
+
 function renderSup(){
   if(view.tab==='sga'&&view.sg)return renderSurv();
   const m=$('m'),sv=db.users.filter(u=>u.role==='surv');
   m.innerHTML=`<div class="tabs"><button class="${view.tab==='eleves'?'on':'s'}" onclick="view.tab='eleves';render()">Tous les élèves</button>
-  <button class="${view.tab==='sga'?'on':'s'}" onclick="view.tab='sga';view.sg=null;render()">Les SGA</button>${me.role==='sup'||me.role==='master'?`<button class="${view.tab==='comptes'?'on':'s'}" onclick="view.tab='comptes';render()">Comptes${me.role==='master'&&(db.reqs||[]).length?' 🔔'+db.reqs.length:''}</button>`:''}${me.role==='master'?`<button class="${view.tab==='outils'?'on':'s'}" onclick="view.tab='outils';view.fs='';view.fc='';render()">Outils</button>`:''}</div><div id="sb"></div>`;
+  <button class="${view.tab==='sga'?'on':'s'}" onclick="view.tab='sga';view.sg=null;render()">Les SGA</button>${canProf()?`<button class="${view.tab==='profs'?'on':'s'}" onclick="view.tab='profs';view.subj=null;render()">Gestion des Professeurs</button>`:''}${me.role==='sup'||me.role==='master'?`<button class="${view.tab==='comptes'?'on':'s'}" onclick="view.tab='comptes';render()">Comptes${me.role==='master'&&(db.reqs||[]).length?' 🔔'+db.reqs.length:''}</button>`:''}${me.role==='master'?`<button class="${view.tab==='outils'?'on':'s'}" onclick="view.tab='outils';view.fs='';view.fc='';render()">Outils</button>`:''}</div><div id="sb"></div>`;
   if(view.tab==='sga'){$('sb').innerHTML=`<div class="card"><h2>Les SGA</h2>${sgList()}</div>`;return}
+  if(view.tab==='profs'&&canProf()){profsPage();return}
   if(view.tab==='comptes'&&(me.role==='sup'||me.role==='master')){
     const ms=me.role==='master',us=db.users.filter(u=>u.role!=='master'),rq=db.reqs||[],rqOf=id=>rq.find(r=>r.u===id);
     $('sb').innerHTML=`<div class="card wrap"><h2>Comptes</h2>${ms&&rq.length?`<p class="er"><b>🔔 ${rq.length} compte(s) à traiter (code oublié ou bloqué)</b></p>`:''}<p class="mu">Un mot de passe vide oblige la personne à recréer son code à sa prochaine connexion.${ms?' « Réinitialiser le code » vide le code : la personne en crée un nouveau à sa prochaine connexion. Tu peux aussi saisir toi-même un nouveau code dans la colonne « Mot de passe ». « Bloquer » empêche toute connexion.':''}</p><table><tr><th>Nom</th><th>Identifiant</th><th>Mot de passe</th>${ms?'<th>Statut</th><th>Code modifié le</th><th></th>':''}</tr>
@@ -689,14 +864,14 @@ function restore(f){
     const o=JSON.parse(r.result);
     if(!Array.isArray(o.users)||!Array.isArray(o.classes)||!Array.isArray(o.students))throw 0;
     if(!confirm('Remplacer toutes les données actuelles par cette sauvegarde ?'))return;
-    o.abs=o.abs||{};o.v3=1;
+    o.abs=o.abs||{};o.profs=o.profs||[];o.pabs=o.pabs||{};o.v3=1;
     if(!o.users.some(u=>u.id==='master'))o.users.push(db.users.find(u=>u.id==='master'));
     db=o;save();me=db.users.find(u=>u.id===me.id)||null;view.fs='';view.fc='';alert('Sauvegarde restaurée.');me?render():go('home');
   }catch(e){alert('Fichier de sauvegarde invalide')}};
   r.readAsText(f)}
 function exportAll(){
   if(!window.XLSX)return alert('Module Excel non chargé. Vérifie ta connexion internet.');
-  const wb=XLSX.utils.book_new(),used={'tous les élèves':1,'absences':1};
+  const wb=XLSX.utils.book_new(),used={'tous les élèves':1,'absences':1,'professeurs':1,'absences professeurs':1};
   const sn=n=>{const b=n.replace(/[\\\/\?\*\[\]:]/g,' ').slice(0,27).trim()||'Classe';let k=b,i=2;while(used[k.toLowerCase()])k=b.slice(0,25)+' '+i++;used[k.toLowerCase()]=1;return k};
   const cls=db.classes.slice().sort((x,y)=>userName(x.owner).localeCompare(userName(y.owner),'fr')||(x.promo||'A').localeCompare(y.promo||'A')||x.name.localeCompare(y.name,'fr'));
   const all=[['SGA','Promotion','Classe','Nom complet','Sexe','Téléphone des parents']],sheets=[];
@@ -711,6 +886,11 @@ function exportAll(){
     const st=db.students.find(x=>x.id===sid),c=st&&db.classes.find(x=>x.id===st.cid);if(!c)return;
     ab.push([d,st.name,c.name,pn(c.owner,c.promo||'A'),userName(c.owner),r.m?'Absent':'',r.s?'Absent':''])}));
   XLSX.utils.book_append_sheet(wb,XLSX.utils.aoa_to_sheet(ab),'Absences');
+  const pr=[['Matière','Nom complet','Téléphone']];(db.profs||[]).slice().sort((x,y)=>SUBJ.indexOf(x.subj)-SUBJ.indexOf(y.subj)||x.name.localeCompare(y.name,'fr')).forEach(p=>pr.push([p.subj,p.name,p.phone||'']));
+  XLSX.utils.book_append_sheet(wb,XLSX.utils.aoa_to_sheet(pr),'Professeurs');
+  const pa=[['Date','Matière','Nom complet','Téléphone','Ab matin 1','Ab matin 2','Ab soir 1','Ab soir 2','Motif','Observation']];
+  Object.keys(db.pabs||{}).sort().forEach(d=>Object.entries(db.pabs[d]).forEach(([id,r])=>{const p=(db.profs||[]).find(x=>x.id===id);if(p)pa.push([d,p.subj,p.name,p.phone||'',r.m1?'Ab':'',r.m2?'Ab':'',r.s1?'Ab':'',r.s2?'Ab':'',r.motif||'',r.obs||''])}));
+  XLSX.utils.book_append_sheet(wb,XLSX.utils.aoa_to_sheet(pa),'Absences professeurs');
   XLSX.writeFile(wb,'toutes_les_listes_'+today()+'.xlsx')}
 
 /* ===== Gestion avancée des présences (ajouts) ===== */
@@ -798,7 +978,7 @@ const msgMine=m=>m.to==='all'||m.to===me.id||m.from===me.id;
 const msgTh=m=>m.to==='all'?'all':(m.from===me.id?m.to:m.from);
 function msgUnread(th){const sn=msgSeen();return(db.msgs||[]).filter(m=>msgMine(m)&&m.from!==me.id&&msgTh(m)===th&&m.t>(sn[th]||0)).length}
 function msgTotal(){if(!me)return 0;const sn=msgSeen();return(db.msgs||[]).filter(m=>msgMine(m)&&m.from!==me.id&&m.t>(sn[msgTh(m)]||0)).length}
-function msgBadge(){const n=msgTotal();document.title=(n?'('+n+') ':'')+'CEG1 ALLADA - Gestion Présence/Absence des élèves';document.querySelectorAll('.mbd').forEach(e=>{e.textContent=n||'';e.style.display=n?'inline-block':'none'})}
+function msgBadge(){const n=msgTotal();document.title=(n?'('+n+') ':'')+'CEG1 ALLADA - Gestion Présence/Absence Elv-Prof';document.querySelectorAll('.mbd').forEach(e=>{e.textContent=n||'';e.style.display=n?'inline-block':'none'})}
 function msgPaint(first){
   const el=$('mlist');if(!el||!me)return;
   const th=view.mt||'all',nm=id=>(db.users.find(u=>u.id===id)||{name:'?'}).name,p=n=>String(n).padStart(2,'0');
@@ -846,6 +1026,86 @@ function msgPage(){
   <div id="mlist" class="mlist"></div>
   <div class="row" style="margin-top:10px;flex-wrap:nowrap"><input id="mt" placeholder="Écris ton message…" maxlength="1000" autocomplete="off" style="flex:1;min-width:0" onkeydown="if(event.key==='Enter'&&!event.shiftKey){event.preventDefault();msgSend()}"><button onclick="msgSend()">Envoyer</button></div>
   <p class="mu" style="margin-top:8px;font-size:12px">Écris à tout le monde ou en privé à une personne. Les messages sont partagés entre tous les appareils reliés par la synchronisation.</p></div></main>`}
+
+/* ===== Gestion avancée des professeurs (ajouts : statistiques, outils rapides, export) ===== */
+const pxSlots=['m1','m2','s1','s2'];
+const pxSlotNb=r=>pxSlots.filter(k=>r&&r[k]).length;
+const pxSeuil=()=>(db.set&&db.set.seuilProf)||4;
+function pxSetSeuil(v){v=parseInt(v);if(v>0){db.set=db.set||{};db.set.seuilProf=v;save();render()}}
+function pxPer(){const t=today(),d=new Date(t+'T12:00:00'),p=view.xp||'30';let a;
+  if(p==='all'){const k=Object.keys(db.pabs||{}).sort()[0];a=new Date((k||t)+'T12:00:00')}
+  else{a=new Date(d);a.setDate(d.getDate()-(+p-1))}
+  let n=0;for(let x=new Date(a);x<=d;x.setDate(x.getDate()+1)){const w=x.getDay();if(w>0&&w<6)n++}
+  return{a:fmtD(a),b:t,n}}
+function pxStats(list){
+  const P=pxPer(),sv=pxSeuil(),pabs=db.pabs||{},days=Object.keys(pabs).filter(d=>d>=P.a&&d<=P.b);
+  const rows=list.map(p=>{const o={p,cr:0,jo:0,ju:0};
+    days.forEach(d=>{const r=pabs[d][p.id],n=pxSlotNb(r);if(!n)return;
+      o.cr+=n;o.jo++;if(r.motif&&r.motif!=='Sans motif')o.ju++});
+    o.t=taux(o.cr,P.n*4);o.al=o.cr>=sv;return o});
+  rows.sort((x,y)=>x.t-y.t||x.p.name.localeCompare(y.p.name,'fr'));
+  return{P,rows}}
+function pxTable(S){
+  return `<div class="wrap"><table><tr><th>Nom complet</th><th>Matière</th><th>Présence</th><th>Créneaux absents</th><th>Jours d'absence</th><th>Justifiées</th><th>Alerte</th></tr>
+  ${S.rows.map(o=>`<tr><td>${esc(o.p.name)}</td><td>${esc(o.p.subj)}</td><td>${o.t} %</td><td>${o.cr}</td><td>${o.jo}</td><td>${o.ju}</td><td class="${o.al?'er':''}">${o.al?'⚠️ À surveiller':'—'}</td></tr>`).join('')||'<tr><td colspan="7" class="mu">Aucune donnée.</td></tr>'}</table></div>`}
+function pxToday(list){
+  const day=(db.pabs||{})[view.date]||{},ab=list.filter(p=>pxSlotNb(day[p.id]));
+  return `<p style="margin:6px 0 10px"><b>Le ${frD(view.date)} :</b> ${ab.length?ab.length+' absent(s) — '+ab.map(p=>esc(p.name)+' ('+esc(profSlotTxt(day[p.id]))+')').join(', '):'<span class="ok">tout le monde est présent</span>'}</p>`}
+function pxPanel(list,title,sj){
+  const S=pxStats(list),P=S.P,n=list.length,cr=S.rows.reduce((a,o)=>a+o.cr,0),al=S.rows.filter(o=>o.al).length;
+  return `<div class="card"><h2>${title}</h2>
+  <div class="row">${perSel()}<span class="mu">Seuil d'alerte :</span><input type="number" min="1" value="${pxSeuil()}" style="width:80px" onchange="pxSetSeuil(this.value)"><span class="mu">créneaux</span></div>
+  <p><b>Présence : ${taux(cr,n*P.n*4)} %</b> <span class="mu">· ${n} professeur(s) · ${cr} créneau(x) d'absence · ${P.n} jour(s) ouvré(s) · ${al} en alerte</span></p>
+  ${pxToday(list)}
+  ${pxTable(S)}
+  <div class="row" style="margin-top:12px"><button class="s" onclick="pxExport('${sj}')">📤 Exporter en Excel</button></div>
+  <p class="mu" style="font-size:12px">Présence = créneaux présents / créneaux possibles (4 par jour ouvré). Justifiée = absence avec un motif autre que « Sans motif ».</p></div>`}
+function pxTools(l,sj){
+  const w=new Date(view.date+'T12:00:00').getDay();
+  return `<div class="card"><h2>⚡ Outils rapides · ${esc(sj)}</h2><div class="row">
+  <button class="s" onclick="pxBulk('${sj}','')">✅ Tous présents</button>
+  <button class="s" onclick="pxBulk('${sj}','m')">Absents matin 1 et 2</button>
+  <button class="s" onclick="pxBulk('${sj}','s')">Absents soir 1 et 2</button>
+  <button class="s" onclick="pxBulk('${sj}','ms')">Absents journée</button>
+  <button class="s" onclick="pxCopyPrev('${sj}')">📋 Reprendre la veille</button></div>
+  <p class="mu">Ces boutons s'appliquent aux ${l.length} professeur(s) de ${esc(sj)} pour le ${frD(view.date)}. Corrige ensuite individuellement dans le tableau.</p>${w===0||w===6?'<p class="er">Attention : ce jour est un week-end.</p>':''}</div>`}
+function pxBulk(sj,k){if(!canProf())return;
+  const l=(db.profs||[]).filter(p=>p.subj===sj);if(!l.length)return;
+  const lab=k===''?'présents':k==='m'?'absents le matin (1 et 2)':k==='s'?'absents le soir (1 et 2)':'absents toute la journée';
+  if(!confirm('Marquer les '+l.length+' professeur(s) de '+sj+' '+lab+' le '+frD(view.date)+' ?'+(k===''?'\nLes motifs et observations de ce jour seront effacés.':'')))return;
+  keep(()=>{db.pabs=db.pabs||{};const d=db.pabs[view.date]=db.pabs[view.date]||{};
+    l.forEach(p=>{
+      if(!k){delete d[p.id];return}
+      const r=d[p.id]=d[p.id]||{};
+      if(k==='m'||k==='ms'){r.m1=true;r.m2=true}
+      if(k==='s'||k==='ms'){r.s1=true;r.s2=true}});
+    if(!Object.keys(d).length)delete db.pabs[view.date];
+    save()})}
+function pxCopyPrev(sj){if(!canProf())return;
+  const cur=view.date||today(),d=new Date(cur+'T12:00:00');
+  do{d.setDate(d.getDate()-1)}while(d.getDay()===0||d.getDay()===6);
+  const prev=fmtD(d),src=(db.pabs||{})[prev]||{};
+  const l=(db.profs||[]).filter(p=>p.subj===sj&&pxSlotNb(src[p.id]));
+  if(!l.length)return alert('Aucune absence enregistrée le '+frD(prev)+' pour '+sj+'.');
+  if(!confirm(l.length+' absence(s) du '+frD(prev)+' seront reprises pour le '+frD(cur)+' (créneaux seulement ; motifs et observations non repris). Continuer ?'))return;
+  keep(()=>{db.pabs=db.pabs||{};const t=db.pabs[cur]=db.pabs[cur]||{};
+    l.forEach(p=>{const s=src[p.id];t[p.id]={m1:!!s.m1,m2:!!s.m2,s1:!!s.s1,s2:!!s.s2}});
+    save()})}
+function pxExport(sj){
+  if(!canProf())return;
+  if(!window.XLSX)return alert('Module Excel non chargé. Vérifie ta connexion internet.');
+  const P=pxPer(),S=pxStats((db.profs||[]).filter(p=>!sj||p.subj===sj));
+  const wb=XLSX.utils.book_new();
+  XLSX.utils.book_append_sheet(wb,XLSX.utils.aoa_to_sheet([['Nom complet','Matière','Présence (%)','Créneaux absents',"Jours d'absence",'Jours justifiés','Alerte'],...S.rows.map(o=>[o.p.name,o.p.subj,o.t,o.cr,o.jo,o.ju,o.al?'Oui':'Non'])]),'Statistiques');
+  XLSX.utils.book_append_sheet(wb,XLSX.utils.aoa_to_sheet([['Date','Matière','Nom complet',"Type d'absence",'Motif','Observation'],...profAbsList(sj,P.a,P.b).map(o=>[o.d,o.p.subj,o.p.name,o.type,o.motif,o.obs])]),'Détail');
+  XLSX.writeFile(wb,'presence_professeurs'+(sj?'_'+sj.replace(/\s+/g,'_'):'')+'_'+P.b+'.xlsx')}
+function pxExtras(){
+  if(!canProf()||view.tab!=='profs'||!$('sb'))return;
+  const all=db.profs||[];
+  if(!view.subj){if(all.length)$('sb').insertAdjacentHTML('beforeend',pxPanel(all,'📊 Tableau de bord des professeurs',''));return}
+  const l=all.filter(p=>p.subj===view.subj);
+  $('sb').insertAdjacentHTML('beforeend',pxTools(l,view.subj)+pxPanel(l,'📊 Statistiques · '+esc(view.subj),view.subj));
+}
 
 render();
 </script>
