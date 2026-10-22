@@ -1072,6 +1072,8 @@ body button.ab.on:active,body.acct button.ab.on:active{transform:scale(.97)!impo
       '</b><button class="s" onclick="document.getElementById(\'xmod\').remove()">✕ Fermer</button></div><div style="overflow:auto;padding:12px 14px">' + html + '</div></div>';
   }
 
+  window.xModal = modal;
+
   window.jOpen = function(tab){
     tab = window.__jt = tab || 'tout';
     var gs = {}, order = [];
@@ -1154,6 +1156,236 @@ body button.ab.on:active,body.acct button.ab.on:active{transform:scale(.97)!impo
   /* ---- Hors ligne : fichier sw.js à placer à côté de cette page (http/https uniquement) ---- */
   if ('serviceWorker' in navigator && /^https?:$/.test(location.protocol)) navigator.serviceWorker.register('sw.js').catch(function(){});
 })();
+
+</script>
+<script>
+/* Correctif transfert + copie entre SG + synchronisation automatique renforcée */
+(function(){
+  var nzz = function(t){ return String(t).normalize('NFD').replace(/[\u0300-\u036f]/g, '').toLowerCase().trim(); };
+  var clone = function(o){ return JSON.parse(JSON.stringify(o)); };
+  var user = function(id){ return db.users.find(function(u){ return u.id === id; }); };
+
+  /* Cause du bug : la liste des promotions d'un SG vient de promoKeys, que le transfert ne mettait pas à jour.
+     La promotion restait affichée (vide) chez l'origine et restait invisible chez le destinataire. */
+  function keyFor(dst, name){
+    var ks = promoKeys(dst.id).slice(); dst.promos = dst.promos || {};
+    var f = ks.find(function(k){ return nzz(pn(dst.id, k)) === nzz(name); });
+    if (f) return f;
+    var k = 'P' + uid(); ks.push(k); dst.promoKeys = ks; dst.promos[k] = name; return k;
+  }
+  function repair(){          /* répare les transferts déjà faits : rend visibles les promotions orphelines */
+    if (!me) return;
+    var ch = 0;
+    db.classes.forEach(function(c){
+      if (!isM() && c.owner !== me.id) return;   /* un SG répare ses propres promotions, le master répare tout */
+      var u = user(c.owner); if (!u) return;
+      var k = c.promo || 'A', ks = promoKeys(u.id);
+      if (ks.indexOf(k) < 0) { u.promoKeys = ks.concat([k]); ch++; }
+    });
+    if (ch) save();
+  }
+  function done(msg){
+    save(); try { closeSheet(); } catch (e) {}
+    var m = document.getElementById('xmod'); if (m) m.remove();
+    render(); try { syRun(); } catch (e) {} alert(msg);
+  }
+
+  window.trGo = function(){
+    var S = $('trS'), T = $('trT'), E = $('trE'), D = $('trD'), src = S && user(S.value);
+    if (!src || !E.value || !D.value) return alert('Choisis l\'élément et la destination.');
+    if (T.value === 'student') {
+      var stu = db.students.find(function(x){ return x.id === E.value; }), dc = db.classes.find(function(c){ return c.id === D.value; });
+      if (!stu || !dc) return alert('Élève ou classe introuvable.');
+      if (stu.cid === dc.id) return alert('L\'élève est déjà dans cette classe.');
+      if (!confirm('Transférer « ' + stu.name + ' » vers « ' + dc.name + ' · ' + userName(dc.owner) + ' » ?\nSes absences cochées le suivent.')) return;
+      stu.cid = dc.id; return done('Élève transféré vers ' + dc.name + '.');
+    }
+    var dst = user(D.value);
+    if (!dst || dst.id === src.id) return alert('Choisis un SG de destination différent du SG d\'origine.');
+    if (!confirm('Transférer vers ' + dst.name + ' ?\nLes élèves et les absents cochés suivent.')) return;
+    var n = 0;
+    if (T.value === 'promo') {
+      var k = E.value, nk = keyFor(dst, pn(src.id, k));
+      db.classes.forEach(function(c){ if (c.owner === src.id && (c.promo || 'A') === k) { c.owner = dst.id; c.promo = nk; n++; } });
+      src.promoKeys = promoKeys(src.id).filter(function(x){ return x !== k; });
+      if (src.promos) delete src.promos[k];
+    } else {
+      var c = db.classes.find(function(x){ return x.id === E.value; });
+      if (!c || c.owner !== src.id) return alert('Classe introuvable.');
+      c.promo = keyFor(dst, pn(src.id, c.promo || 'A')); c.owner = dst.id; n = 1;
+    }
+    done('Transfert effectué : ' + n + ' classe(s) déplacée(s) vers ' + dst.name + '.');
+  };
+
+  /* ---- Copie (l'original reste chez le SG d'origine) ---- */
+  function copyAbs(map){
+    ['abs', 'ext'].forEach(function(t){
+      var m = db[t] || {};
+      Object.keys(m).forEach(function(d){ Object.keys(m[d] || {}).forEach(function(sid){ if (map[sid]) m[d][map[sid]] = clone(m[d][sid]); }); });
+    });
+  }
+  function copyClass(c, src, dst, withAbs){
+    var nk = keyFor(dst, pn(src.id, c.promo || 'A')), nc = clone(c), map = {}, n = 0;
+    nc.id = uid(); nc.owner = dst.id; nc.promo = nk;
+    if (db.classes.some(function(x){ return x.owner === dst.id && x.annee === nc.annee && (x.promo || 'A') === nk && nzz(x.name) === nzz(nc.name); })) nc.name += ' (copie)';
+    db.classes.push(nc);
+    db.students.filter(function(s){ return s.cid === c.id; }).forEach(function(s){ var ns = clone(s); ns.id = uid(); ns.cid = nc.id; db.students.push(ns); map[s.id] = ns.id; n++; });
+    if (withAbs) copyAbs(map);
+    return n;
+  }
+  window.cpOpen = function(){
+    var sgs = db.users.filter(function(u){ return u.role === 'surv'; });
+    xModal('📋 Copier vers un autre SG',
+      '<p class="mu">Crée une copie complète chez un autre SG. L\'original reste en place.</p>' +
+      '<p style="margin:8px 0 4px"><b>1. SG d\'origine</b></p><select id="trS" onchange="trRefresh()" style="width:100%">' + sgs.map(function(u){ return '<option value="' + u.id + '">' + esc(u.name) + '</option>'; }).join('') + '</select>' +
+      '<p style="margin:8px 0 4px"><b>2. Type</b></p><select id="trT" onchange="trRefresh()" style="width:100%"><option value="promo">Une promotion (avec ses classes et élèves)</option><option value="class">Une classe (avec ses élèves)</option><option value="student">Un élève (vers une classe)</option></select>' +
+      '<p style="margin:8px 0 4px"><b>3. Élément à copier</b></p><select id="trE" style="width:100%"></select>' +
+      '<p style="margin:8px 0 4px"><b>4. Destination</b></p><select id="trD" style="width:100%"></select>' +
+      '<label style="display:block;margin:10px 0"><input type="checkbox" id="cpA"> Copier aussi les absences cochées</label>' +
+      '<button onclick="cpGo()">📋 Copier</button>');
+    trRefresh();
+  };
+  window.cpGo = function(){
+    var S = $('trS'), T = $('trT'), E = $('trE'), D = $('trD'), A = $('cpA').checked, src = S && user(S.value);
+    if (!src || !E.value || !D.value) return alert('Choisis l\'élément et la destination.');
+    if (T.value === 'student') {
+      var s = db.students.find(function(x){ return x.id === E.value; }), dc = db.classes.find(function(c){ return c.id === D.value; });
+      if (!s || !dc) return alert('Élève ou classe introuvable.');
+      if (db.students.some(function(x){ return x.cid === dc.id && nzz(x.name) === nzz(s.name); })) return alert('Un élève de même nom existe déjà dans cette classe.');
+      if (!confirm('Copier « ' + s.name + ' » vers « ' + dc.name + ' · ' + userName(dc.owner) + ' » ?')) return;
+      var ns = clone(s), map = {}; ns.id = uid(); ns.cid = dc.id; db.students.push(ns); map[s.id] = ns.id; if (A) copyAbs(map);
+      return done('Élève copié.');
+    }
+    var dst = user(D.value);
+    if (!dst || dst.id === src.id) return alert('Choisis un SG de destination différent du SG d\'origine.');
+    if (!confirm('Copier vers ' + dst.name + ' ?')) return;
+    var cs = T.value === 'promo' ? db.classes.filter(function(c){ return c.owner === src.id && (c.promo || 'A') === E.value; }) : db.classes.filter(function(c){ return c.id === E.value && c.owner === src.id; }), ne = 0;
+    cs.forEach(function(c){ ne += copyClass(c, src, dst, A); });
+    done('Copie effectuée : ' + cs.length + ' classe(s), ' + ne + ' élève(s) vers ' + dst.name + '.');
+  };
+
+
+  /* ---- Centre des promotions (master) : retrouver, envoyer, copier, renommer, créer, exporter, supprimer ---- */
+  var fpSt = {f: '', d: ''};
+  function absOf(sid, ds){ var n = 0; ds.forEach(function(d){ var r = (db.abs[d] || {})[sid]; if (r) n += (r.m ? 1 : 0) + (r.s ? 1 : 0); }); return n; }
+  function groups(){
+    var p = rapAnPeriode(), ds = Object.keys(db.abs || {}).filter(function(d){ return d >= p[0] && d <= p[1]; }), g = {}, cm = {};
+    db.classes.forEach(function(c){ var k = c.promo || 'A', id = c.owner + '|' + k, x = g[id] = g[id] || {o: c.owner, k: k, cs: [], e: 0, ab: 0, du: 0}; x.cs.push(c); cm[c.id] = x; });
+    db.students.forEach(function(s){ var x = cm[s.cid]; if (!x) return; x.e++; x.ab += absOf(s.id, ds); try { x.du += restePaie(s.id) || 0; } catch (e) {} });
+    return {g: g, ds: ds};
+  }
+  function hub(msg){ save(); try { closeSheet(); } catch (e) {} render(); try { syRun(); } catch (e) {} fpOpen(); if (msg) alert(msg); }
+  window.fpOpen = function(){
+    var a = document.getElementById('fpF'), b = document.getElementById('fpD');
+    var q0 = document.getElementById('fpQ'); if (a) fpSt.f = a.value; if (b) fpSt.d = b.value; if (q0) fpSt.q = q0.value;
+    var sgs = db.users.filter(function(u){ return u.role === 'surv'; }), G = groups().g;
+    var ks = Object.keys(G).map(function(id){ return G[id]; }).filter(function(x){ return !fpSt.f || x.o === fpSt.f; })
+      .sort(function(x, y){ return nzz(userName(x.o) + pn(x.o, x.k)) < nzz(userName(y.o) + pn(y.o, y.k)) ? -1 : 1; });
+    var T = {c: 0, e: 0, ab: 0, du: 0}; ks.forEach(function(x){ T.c += x.cs.length; T.e += x.e; T.ab += x.ab; T.du += x.du; });
+    var opt = function(sel){ return sgs.map(function(u){ return '<option value="' + u.id + '"' + (u.id === sel ? ' selected' : '') + '>' + esc(u.name) + '</option>'; }).join(''); };
+    var qo = Object.keys(G).map(function(id){ return G[id]; }).sort(function(x, y){ return nzz(pn(x.o, x.k)) < nzz(pn(y.o, y.k)) ? -1 : 1; })
+      .map(function(x){ var v = x.o + '|' + x.k; return '<option value="' + v + '"' + (fpSt.q === v ? ' selected' : '') + '>' + esc(pn(x.o, x.k)) + ' — ' + esc(userName(x.o)) + '</option>'; }).join('');
+    var bt = function(act, q, txt){ return '<button class="s" style="padding:6px 9px;font-size:13px" onclick="fpA(\'' + act + '\',' + q + ')">' + txt + '</button>'; };
+    xModal('🎓 Centre des promotions',
+      '<div class="card"><b>🚀 Envoi rapide</b><p class="mu" style="margin:6px 0 4px">Promotion à envoyer :</p><select id="fpQ" style="width:100%">' + qo + '</select>' +
+      '<p class="mu" style="margin:8px 0 4px">Vers le SG (aussi pour Copier et Nouvelle promotion) :</p><select id="fpD" style="width:100%">' + opt(fpSt.d) + '</select>' +
+      '<button style="margin-top:8px" onclick="fpQuick()">🚀 Envoyer</button></div>' +
+      '<p class="mu" style="margin-bottom:4px">Voir :</p><select id="fpF" onchange="fpOpen()" style="width:100%;margin-bottom:8px"><option value="">Tous les SG</option>' + opt(fpSt.f) + '</select>' +
+      '<div class="row" style="margin-bottom:8px"><button onclick="fpA(\'new\')">+ Nouvelle promotion</button></div>' +
+      '<div class="card"><b>' + ks.length + '</b> promotion(s) · <b>' + T.c + '</b> classe(s) · <b>' + T.e + '</b> élève(s) · <b>' + T.ab + '</b> abs. (½ j) · impayés <b>' + T.du.toLocaleString('fr-FR') + '</b></div>' +
+      (ks.map(function(x){
+        var q = '\'' + x.o + '\',\'' + x.k + '\'';
+        return '<div style="border:1px solid var(--bd);border-radius:12px;padding:10px;margin-bottom:8px;background:var(--card)"><b>' + esc(pn(x.o, x.k)) + '</b> <span class="mu">· ' + esc(userName(x.o)) + '</span>' +
+          '<div class="mu">' + x.cs.length + ' classe(s) · ' + x.e + ' élève(s) · ' + x.ab + ' abs. · ' + x.du.toLocaleString('fr-FR') + ' impayés</div>' +
+          '<div style="display:flex;flex-wrap:wrap;gap:6px;margin-top:6px">' + bt('mv', q, '➜ Envoyer') + bt('cp', q, '📋 Copier') + bt('rn', q, '✏️ Renommer') + bt('xl', q, '📥 Excel') + bt('rm', q, '🗑 Supprimer') + '</div></div>';
+      }).join('') || '<p class="mu">Aucune promotion.</p>'));
+  };
+  window.fpQuick = function(){ var q = ((document.getElementById('fpQ') || {}).value || '').split('|'); if (q.length === 2) fpA('mv', q[0], q[1]); };
+  window.fpA = function(act, o, k){
+    var dst = user((document.getElementById('fpD') || {}).value), src = user(o), cs = db.classes.filter(function(c){ return c.owner === o && (c.promo || 'A') === k; });
+    if (act === 'new') {
+      if (!dst) return;
+      var n = (prompt('Nom de la nouvelle promotion pour ' + dst.name + ' :') || '').trim().replace(/\s+/g, ' ');
+      if (!n) return;
+      if (promoKeys(dst.id).some(function(x){ return nzz(pn(dst.id, x)) === nzz(n); })) return alert('Cette promotion existe déjà chez ' + dst.name + '.');
+      keyFor(dst, n); return hub();
+    }
+    if (!src) return;
+    var nm = pn(o, k);
+    if (act === 'mv' || act === 'cp') {
+      if (!dst || dst.id === o) return alert('Choisis un SG cible différent de ' + src.name + '.');
+      if (act === 'mv') {
+        if (!confirm('Envoyer « ' + nm + ' » de ' + src.name + ' vers ' + dst.name + ' ?')) return;
+        var nk = keyFor(dst, nm); cs.forEach(function(c){ c.owner = dst.id; c.promo = nk; });
+        src.promoKeys = promoKeys(o).filter(function(x){ return x !== k; }); if (src.promos) delete src.promos[k];
+        return hub(cs.length + ' classe(s) envoyée(s) vers ' + dst.name + '.');
+      }
+      if (!confirm('Copier « ' + nm + ' » vers ' + dst.name + ' ?')) return;
+      var A = confirm('Copier aussi les absences cochées ?\nOK = oui, Annuler = non'), ne = 0;
+      cs.forEach(function(c){ ne += copyClass(c, src, dst, A); });
+      return hub('Copie effectuée : ' + cs.length + ' classe(s), ' + ne + ' élève(s).');
+    }
+    if (act === 'rn') {
+      var n2 = (prompt('Nouveau nom de la promotion :', nm) || '').trim().replace(/\s+/g, ' ');
+      if (!n2 || n2 === nm) return;
+      if (promoKeys(o).some(function(x){ return x !== k && nzz(pn(o, x)) === nzz(n2); })) return alert('Ce nom existe déjà chez ' + src.name + '.');
+      src.promos = src.promos || {}; src.promos[k] = n2; return hub();
+    }
+    if (act === 'xl') {
+      if (typeof XLSX === 'undefined') return alert('Export Excel indisponible (bibliothèque non chargée).');
+      var ds = groups().ds, rows = [['SG', 'Promotion', 'Classe', 'Année', 'Élève', 'Absences (½ j)', 'Reste à payer']];
+      cs.forEach(function(c){ db.students.filter(function(s){ return s.cid === c.id; }).forEach(function(s){
+        var du = 0; try { du = restePaie(s.id) || 0; } catch (e) {}
+        rows.push([src.name, nm, c.name, c.annee, s.name || '', absOf(s.id, ds), du]); }); });
+      var wb = XLSX.utils.book_new(); XLSX.utils.book_append_sheet(wb, XLSX.utils.aoa_to_sheet(rows), 'Promotion');
+      return XLSX.writeFile(wb, 'promotion_' + nm.replace(/[^\w-]+/g, '_') + '.xlsx');
+    }
+    if (act === 'rm') {
+      var ns = db.students.filter(function(s){ return cs.some(function(c){ return c.id === s.cid; }); }).length;
+      if (!confirm('Supprimer « ' + nm + ' » (' + src.name + ') avec ' + cs.length + ' classe(s) et ' + ns + ' élève(s) ?\nLe Journal permet de les restaurer.')) return;
+      dropClasses(cs.map(function(c){ return c.id; }));
+      src.promoKeys = promoKeys(o).filter(function(x){ return x !== k; }); if (src.promos) delete src.promos[k];
+      hub('Promotion supprimée.');
+    }
+  };
+
+  /* ---- Synchronisation automatique : relance rapide en attente / hors connexion ---- */
+  function pend(){ return Object.keys(sy.meta || {}).filter(function(k){ return sy.meta[k].d; }).length; }
+  function kick(){ try { if (syOn() && navigator.onLine) syRun(); } catch (e) {} }
+  setInterval(function(){ if (syOn() && navigator.onLine && (pend() || syStat.st === 'err')) kick(); }, 4000);
+  window.addEventListener('online', function(){ [300, 2500, 8000].forEach(function(t){ setTimeout(kick, t); }); });
+  window.addEventListener('focus', kick);
+  document.addEventListener('visibilitychange', function(){ if (!document.hidden) kick(); });
+
+  /* ---- Bouton « Copier » (master) + réparation des anciens transferts ---- */
+  /* ---- Barre d'en-tête : boutons plus fins et espacés ---- */
+  var st = document.createElement('style');
+  st.textContent = '.xbar{display:flex!important;flex-wrap:wrap!important;gap:6px!important;align-items:center!important}' +
+    '.xbar>*{margin:0!important}.xbtn{padding:5px 9px!important;font-size:13px!important;border-radius:11px!important;min-width:0!important;line-height:1.25!important}';
+  document.head.appendChild(st);
+  function tidy(){
+    var b = Array.from(document.querySelectorAll('header button')).find(function(x){ return x.getAttribute('onclick') === 'logout()'; });
+    if (!b) return;
+    b.parentNode.classList.add('xbar');
+    b.parentNode.querySelectorAll('button,#bsy').forEach(function(x){ x.classList.add('xbtn'); });
+  }
+
+  var r0 = window.render;
+  window.render = function(){
+    var r = r0.apply(this, arguments);
+    try {
+      repair();
+      if (me && isM() && !document.getElementById('bcpy')) {
+        var b = Array.from(document.querySelectorAll('header button')).find(function(x){ return x.getAttribute('onclick') === 'logout()'; });
+        if (b) { var c = document.createElement('button'); c.id = 'bcpy'; c.className = 's'; c.textContent = '📋 Copier'; c.onclick = cpOpen; b.parentNode.insertBefore(c, b); var f = document.createElement('button'); f.id = 'bfp'; f.className = 's'; f.textContent = '🎓 Promotions'; f.onclick = fpOpen; b.parentNode.insertBefore(f, b); }
+      }
+      tidy();
+    } catch (e) {}
+    return r;
+  };
+  try { render(); } catch (e) {}
+})();
+
 </script>
 </body>
 </html>
