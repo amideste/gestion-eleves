@@ -1825,5 +1825,54 @@ body button.ab.on:active,body.acct button.ab.on:active{transform:scale(.97)!impo
   arm();
 })();
 </script>
+<script>
+/* RETOUR sur chaque fenêtre ou boîte de dialogue ouverte : une étape en arrière à la fois, jusqu'à l'écran précédent */
+(function(){
+  var STATIC = { sov: true, devov: true };
+  function visible(el){
+    return !el.hidden && el.style.display !== 'none';
+  }
+  function candidates(){
+    var out = [];
+    var st = document.getElementById('sov'); if (st) out.push(st);
+    var dv = document.getElementById('devov'); if (dv) out.push(dv);
+    var va = document.getElementById('va-ov'); if (va) out.push(va);
+    Array.prototype.forEach.call(document.body.children, function(el){
+      if (el.id === 'exit-toast' || el.id === 'app' || el.tagName !== 'DIV') return;
+      if (out.indexOf(el) !== -1) return;
+      var s = el.getAttribute('style') || '';
+      if (/position\s*:\s*fixed/.test(s)) out.push(el);
+    });
+    return out;
+  }
+  function close(el){
+    if (el.id === 'sov' || el.id === 'devov') { el.hidden = true; return; }
+    el.remove();
+  }
+  function panelOf(el){
+    if (el.id === 'sov') return document.getElementById('sheet') || el;
+    if (el.id === 'devov') return document.getElementById('devsh') || el;
+    return el.firstElementChild || el;
+  }
+  function decorate(){
+    candidates().forEach(function(el){
+      if (!visible(el)) return;
+      var panel = panelOf(el);
+      if (!panel || panel.querySelector(':scope > .layer-retour')) return;
+      var bar = document.createElement('div');
+      bar.className = 'layer-retour';
+      bar.style.cssText = 'display:flex;gap:8px;align-items:center;padding:8px 12px;background:#fff;border-bottom:1px solid #D6E4F7;position:sticky;top:0;z-index:5';
+      var b = document.createElement('button');
+      b.className = 's';
+      b.textContent = '← Retour';
+      b.onclick = function(){ close(el); };
+      bar.appendChild(b);
+      panel.insertBefore(bar, panel.firstChild);
+    });
+  }
+  setInterval(decorate, 400);
+  decorate();
+})();
+</script>
 </body>
 </html>
