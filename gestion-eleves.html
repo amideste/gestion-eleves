@@ -2758,6 +2758,7 @@ function paperFrD(t){ return new Date(t + 'T12:00:00').toLocaleDateString('fr-FR
   /* ===== Espace professeur : bouton juste après « Recherche d'un élève » ===== */
   var espCur = null;   /* professeur connecté */
   var espClassId = null; /* classe ouverte (tableau des notes) */
+  var espPromOpen = false; /* liste PROM-CLASS ouverte ou fermée */
   var espQuery = '';     /* saisie de recherche, conservée si la page se redessine */
   var espIsMaster = false; /* MasterLog : ouverture d'un espace professeur sans mot de passe */
   var espSemChoice = 1;  /* 1 = 1er semestre, 2 = 2ème semestre, 3 = bilan annuel */
@@ -2900,7 +2901,7 @@ function paperFrD(t){ return new Date(t + 'T12:00:00').toLocaleDateString('fr-FR
     espLastSet(espFor.key);
     espCur = espFor; espFor = null; render();
   };
-  window.espLogout = function(){ espCur = null; espFor = null; espClassId = null; espIsMaster = false; render(); };
+  window.espLogout = function(){ espCur = null; espFor = null; espClassId = null; espIsMaster = false; espPromOpen = false; espAbsOpen = false; render(); };
   function espLastGet(){ try { return localStorage.getItem('gestion_esp_last') || ''; } catch (e) { return ''; } }
   function espLastSet(k){ try { if (k) localStorage.setItem('gestion_esp_last', k); else localStorage.removeItem('gestion_esp_last'); } catch (e) {} }
   function espIsMasterUser(){ return typeof me !== 'undefined' && !!me && me.role === 'master'; }
@@ -2918,13 +2919,14 @@ function paperFrD(t){ return new Date(t + 'T12:00:00').toLocaleDateString('fr-FR
     list.sort(function(a, b){ return String(a.nom).localeCompare(String(b.nom), 'fr') || String(a.pre).localeCompare(String(b.pre), 'fr'); });
     espStore();
     var h = '<div class="card" style="margin:8px 0"><h3 style="margin:0 0 6px">👥 Espaces des professeurs</h3>' +
-      '<p class="mu" style="margin:0 0 8px">Ouverture sans mot de passe pour le MasterLog.</p>';
+      '<p class="mu" style="margin:0 0 8px">' + (espIsMasterUser() ? 'Ouverture sans mot de passe pour le MasterLog.' : 'Consultation des espaces professeurs (lecture seule).') + '</p>';
+    h += espReqHtml();
     list.forEach(function(e){
       var has = !!db.espPass[e.key];
       var nSel = (db.espSel[e.key] || []).length;
       h += '<div class="cls" style="flex-wrap:wrap"><button onclick="espMasterOpen(\'' + e.key + '\')">' + esc(e.nom + ' ' + e.pre) + ' · ' + esc(e.mat || '—') + '</button> ' +
         '<span class="mu">' + (has ? 'compte créé · ' + nSel + ' classe(s)' : 'pas encore créé') + '</span>';
-      if (has) {
+      if (has && espIsMasterUser()) {
         h += ' <span style="display:flex;gap:6px;flex-wrap:wrap;margin-top:4px">' +
           '<button class="s" title="Réinitialiser" onclick="espMasterReset(\'' + e.key + '\')">🔄 Réinitialiser</button>' +
           '<button class="s" title="Changer le mot de passe" onclick="espMasterSetPass(\'' + e.key + '\')">🔑 Changer le mot de passe</button>' +
@@ -2936,7 +2938,7 @@ function paperFrD(t){ return new Date(t + 'T12:00:00').toLocaleDateString('fr-FR
     return h + '</div>';
   }
   window.espMasterOpen = function(key){
-    if (!espIsMasterUser()) return;
+    if (!espCanView()) return;
     var found = null;
     aes().forEach(function(x){
       (x.profs || []).forEach(function(p){
@@ -2984,16 +2986,164 @@ function paperFrD(t){ return new Date(t + 'T12:00:00').toLocaleDateString('fr-FR
     render();
   };
   window.espReset = function(){ espLastSet(''); espCur = null; espFor = null; espClassId = null; render(); };
+  /* ----- Cocher Absents : le professeur coche les absents de ses classes, avec les mêmes boutons que le SG ----- */
+  var espAbsOpen = false, espAbsDay = '', espAbsQ = '';
+  function espIsoOf(d){ return d.getFullYear() + '-' + String(d.getMonth() + 1).padStart(2, '0') + '-' + String(d.getDate()).padStart(2, '0'); }
+  function espAbsCurDay(){ return espAbsDay || todayIso(); }
+  /* Élèves des seules classes sélectionnées par le professeur, filtrés par la recherche */
+  function espAbsStudents(){
+    var ids = espSelOf(espCur.key).slice();
+    var q = espNrm(espAbsQ);
+    return (db.students || []).filter(function(s){
+      return ids.indexOf(s.cid) >= 0 && (!q || espNrm(s.name).indexOf(q) >= 0);
+    }).sort(function(a, b){
+      var ca = espClassById(a.cid), cb = espClassById(b.cid);
+      return String(ca ? ca.name : '').localeCompare(String(cb ? cb.name : ''), 'fr') || String(a.name).localeCompare(String(b.name), 'fr');
+    });
+  }
+  function espAbsListHtml(){
+    var day = espAbsCurDay(), D = (db.abs || {})[day] || {};
+    var list = espAbsStudents();
+    if (!list.length) return '<p class="mu">Aucun élève trouvé dans tes classes.</p>';
+    var h = '', last = null;
+    list.forEach(function(s){
+      if (s.cid !== last) {
+        last = s.cid;
+        var c = espClassById(s.cid) || {};
+        h += '<p style="margin:10px 0 4px"><b>' + esc(c.name || '?') + '</b> <span class="mu">· ' + esc(c.annee || '') + '</span></p>';
+      }
+      var r = D[s.id] || {}, id = "'" + s.id + "'";
+      h += '<div class="cls" style="cursor:default;display:flex;justify-content:space-between;align-items:center;gap:8px;flex-wrap:wrap"><span>' + esc(s.name) + '</span>' +
+        '<span><button class="ab am ' + (r.m ? 'on' : '') + '" onclick="espAbsToggle(' + id + ',\'m\')">AbM</button> ' +
+        '<button class="ab as ' + (r.s ? 'on' : '') + '" onclick="espAbsToggle(' + id + ',\'s\')">AbS</button> ' +
+        '<button class="ab mld ' + (r.ml ? 'on' : '') + '" onclick="espAbsToggle(' + id + ',\'ml\')">Mld</button> ' +
+        '<button class="ab prm ' + (r.pm ? 'on' : '') + '" onclick="espAbsToggle(' + id + ',\'pm\')">Prm</button></span></div>';
+    });
+    return h;
+  }
+  function espAbsHtml(){
+    var h = '<div class="row"><button onclick="espAbsToggleOpen()">' + (espAbsOpen ? '✖ Fermer Cocher Absents' : '✅ Cocher Absents') + '</button></div>';
+    if (!espAbsOpen) return h;
+    if (!espSelOf(espCur.key).length) return h + '<p class="mu">Sélectionne d\'abord tes classes avec PROM-CLASS.</p>';
+    return h + '<div class="card" style="margin:8px 0"><h3 style="margin:0 0 6px">✅ Cocher Absents</h3>' +
+      '<div class="row"><button class="s" onclick="espAbsShift(-1)">‹</button> <input type="date" value="' + espAbsCurDay() + '" onchange="espAbsSetDay(this.value)"> <button class="s" onclick="espAbsShift(1)">›</button></div>' +
+      '<div class="row"><input id="espAbsQ" value="' + esc(espAbsQ) + '" placeholder="Rechercher un élève" autocomplete="off" oninput="espAbsSearch(this.value)" style="width:100%;height:40px"></div>' +
+      '<div id="espAbsRes">' + espAbsListHtml() + '</div></div>';
+  }
+  window.espAbsToggleOpen = function(){ espAbsOpen = !espAbsOpen; render(); };
+  window.espAbsSetDay = function(v){ if (!v) return; espAbsDay = v; render(); };
+  window.espAbsShift = function(n){ var d = new Date(espAbsCurDay() + 'T12:00:00'); d.setDate(d.getDate() + n); espAbsDay = espIsoOf(d); render(); };
+  window.espAbsSearch = function(v){ espAbsQ = String(v || ''); var box = document.getElementById('espAbsRes'); if (box) box.innerHTML = espAbsListHtml(); };
+  /* Un clic coche ou décoche ; le résultat est lu par la liste des absents du SG */
+  window.espAbsToggle = function(sid, k){
+    if (espGuard() || !espCur) return;
+    var day = espAbsCurDay();
+    db.abs = db.abs || {};
+    db.abs[day] = db.abs[day] || {};
+    var r = db.abs[day][sid] || {};
+    var key = (k === 'm' || k === 's' || k === 'ml') ? k : 'pm';
+    r[key] = !r[key];
+    Object.keys(r).forEach(function(x){ if (!r[x]) delete r[x]; });
+    if (Object.keys(r).length) db.abs[day][sid] = r;
+    else { delete db.abs[day][sid]; if (!Object.keys(db.abs[day]).length) delete db.abs[day]; }
+    try { save(); } catch (e) {}
+    render();
+  };
+  /* PROM-CLASS : ouverture / fermeture de la liste des promotions et classes */
+  window.espPromToggle = function(){ espPromOpen = !espPromOpen; render(); };
+  /* Une classe sélectionnée par un professeur n'est plus sélectionnable par les autres */
+  function espLockedByOther(id){
+    espStore();
+    var mine = espCur ? espCur.key : null;
+    return Object.keys(db.espSel).some(function(k){ return k !== mine && (db.espSel[k] || []).indexOf(id) >= 0; });
+  }
+  /* Nom du professeur qui a déjà sélectionné cette classe (affiché aux autres professeurs) */
+  function espHolderName(id){
+    espStore();
+    var mine = espCur ? espCur.key : null;
+    var k = Object.keys(db.espSel).find(function(k){ return k !== mine && (db.espSel[k] || []).indexOf(id) >= 0; });
+    if (!k) return '';
+    var f = espProfByKey(k);
+    return f ? (f.nom + ' ' + f.pre).trim() : '';
+  }
+  /* ----- Demandes de libération d'une classe prise par un autre professeur ----- */
+  var ESP_ESCALADE_H = 24; /* au-delà de ce délai (en heures), la demande est signalée comme escaladée au MasterLog */
+  function espReqs(){ espStore(); if (!db.espReq) db.espReq = {}; return db.espReq; }
+  function espHolderKey(id){
+    espStore();
+    var mine = espCur ? espCur.key : null;
+    return Object.keys(db.espSel).find(function(k){ return k !== mine && (db.espSel[k] || []).indexOf(id) >= 0; }) || null;
+  }
+  function espNameByKey(k){ var f = k ? espProfByKey(k) : null; return f ? (f.nom + ' ' + f.pre).trim() : '?'; }
+  function espLockBtn(id){
+    var rq = espReqs()[id];
+    if (rq && espCur && rq.from === espCur.key) return '<button class="s" disabled>⏳ Demande envoyée à ' + esc(espHolderName(id)) + '</button>';
+    return '<button class="s" onclick="espAskRelease(\'' + id + '\')">🔒 Prise par ' + esc(espHolderName(id)) + ' · 📨 Demander</button>';
+  }
+  window.espAskRelease = function(id){
+    if (espGuard() || !espCur) return;
+    var holder = espHolderKey(id); if (!holder) return;
+    var R = espReqs();
+    if (R[id] && R[id].from === espCur.key) return alert('Ta demande a déjà été envoyée.');
+    R[id] = { from: espCur.key, to: holder, at: new Date().toISOString() };
+    try { save(); } catch (e) {}
+    alert('Demande envoyée à ' + espNameByKey(holder) + '. Il la verra dans son espace, et le MasterLog aussi.');
+    render();
+  };
+  function espReleaseClass(id, holderKey){
+    espStore();
+    var sel = espSelOf(holderKey), i = sel.indexOf(id);
+    if (i >= 0) sel.splice(i, 1);
+    delete espReqs()[id];
+    try { save(); } catch (e) {}
+    render();
+  }
+  window.espRelease = function(id){ if (espGuard() || !espCur) return; espReleaseClass(id, espCur.key); };
+  window.espMasterRelease = function(id){
+    if (!espIsMasterUser()) return;
+    var rq = espReqs()[id]; if (!rq) return;
+    if (!confirm('Retirer la classe de la liste de ' + espNameByKey(rq.to) + ' ?')) return;
+    espReleaseClass(id, rq.to);
+  };
+  /* Demandes en attente : le MasterLog voit toutes les demandes, et celles de plus de 24 h sont marquées comme escaladées */
+  function espReqHtml(){
+    if (!espIsMasterUser()) return '';
+    var R = espReqs();
+    var ids = Object.keys(R).filter(function(id){ return R[id] && espClassById(id); });
+    if (!ids.length) return '';
+    var h = '<div class="card" style="margin:8px 0"><h3 style="margin:0 0 6px">📨 Demandes de libération</h3>';
+    ids.forEach(function(id){
+      var rq = R[id], c = espClassById(id);
+      var late = (Date.now() - new Date(rq.at).getTime()) / 3600000 >= ESP_ESCALADE_H;
+      h += '<div class="cls" style="flex-wrap:wrap">' + (late ? '<b>⚠️ Escaladée (plus de ' + ESP_ESCALADE_H + ' h) · </b>' : '') +
+        esc(espNameByKey(rq.from)) + ' demande la classe <b>' + esc(c.name || '?') + '</b> prise par ' + esc(espNameByKey(rq.to)) +
+        ' <button class="d" onclick="espMasterRelease(\'' + id + '\')">✕ Retirer de sa liste</button></div>';
+    });
+    return h + '</div>';
+  }
+  /* Accès aux espaces professeurs : MasterLog, Directeur, Censeur, Superviseur (consultation) ; seul le MasterLog gère les comptes */
+  function espCanView(){ return isStaffAE(); }
+  /* Consultation seule : Directeur, Censeur, Superviseur ouvrent l'espace sans pouvoir modifier */
+  function espViewOnly(){ return !!espIsMaster && !espIsMasterUser(); }
+  function espGuard(){
+    if (!espViewOnly()) return false;
+    alert('Consultation seulement : seul le professeur ou le MasterLog peut modifier.');
+    return true;
+  }
   window.espAdd = function(id){
+    if (espGuard()) return;
     if (!espCur) return;
     var sel = espSelOf(espCur.key);
     if (sel.indexOf(id) >= 0) return alert('Cette classe est déjà sélectionnée.');
+    if (espLockedByOther(id)) return alert('Cette classe est déjà sélectionnée par ' + espHolderName(id) + '.');
     sel.push(id); try { save(); } catch (e) {} render();
   };
   window.espRemove = function(id){
-    if (!espCur || !confirm('Supprimer cette classe de ta sélection ?')) return;
+    if (espGuard()) return;
+    if (!espCur || !confirm(espIsMaster ? 'Retirer cette classe de la liste de ce professeur ?' : 'Supprimer cette classe de ta sélection ?')) return;
     var sel = espSelOf(espCur.key), i = sel.indexOf(id);
     if (i >= 0) sel.splice(i, 1);
+    delete espReqs()[id];
     try { save(); } catch (e) {} render();
   };
   /* ----- Notes : moyennes ----- */
@@ -3033,6 +3183,7 @@ function paperFrD(t){ return new Date(t + 'T12:00:00').toLocaleDateString('fr-FR
   window.espBackClasses = function(){ espClassId = null; render(); };
   function espRowsOf(N, sem){ return sem === 2 ? N.rows2 : N.rows; }
   window.espSetNote = function(cid, sid, f, el, sem){
+    if (espGuard()) return;
     if (!espCur) return;
     var N = espNotesOf(espCur.key, cid);
     var rows = espRowsOf(N, sem);
@@ -3066,6 +3217,7 @@ function paperFrD(t){ return new Date(t + 'T12:00:00').toLocaleDateString('fr-FR
     try { save(); } catch (e) {}
   };
   window.espSetCoef = function(cid, v){
+    if (espGuard()) return;
     if (!espCur) return;
     var N = espNotesOf(espCur.key, cid);
     var n = espNum(v);
@@ -3126,6 +3278,32 @@ function paperFrD(t){ return new Date(t + 'T12:00:00').toLocaleDateString('fr-FR
     }
     return list;
   }
+  /* ----- Synthèse en bas de chaque tableau (1er semestre, 2ème semestre, bilan annuel) ----- */
+  var ESP_APPR_LIST = ['Médiocre', 'Très faible', 'Faible', 'Insuffisant', 'Passable', 'Assez bien', 'Bien', 'Très bien', 'Excellent'];
+  function espPc(k, n){ return n ? (k * 100 / n).toFixed(1).replace('.', ',') + ' %' : '0 %'; }
+  function espSummaryHtml(studs, avgOf){
+    var vals = [];
+    studs.forEach(function(st){ var m = avgOf(st); if (m !== null && m !== undefined) vals.push({ name: st.name || '', m: m }); });
+    var n = vals.length;
+    if (!n) return '<div class="card" style="margin:10px 0"><h3 style="margin:0 0 6px">📊 Synthèse de la classe</h3><p class="mu">Aucune moyenne calculée pour le moment.</p></div>';
+    var sorted = vals.slice().sort(function(a, b){ return espTrunc(b.m) - espTrunc(a.m); });
+    var hi = sorted[0], lo = sorted[sorted.length - 1];
+    var hiT = sorted.filter(function(x){ return espTrunc(x.m) === espTrunc(hi.m); }).length - 1;
+    var loT = sorted.filter(function(x){ return espTrunc(x.m) === espTrunc(lo.m); }).length - 1;
+    var ge10 = vals.filter(function(x){ return espTrunc(x.m) >= 10; }).length;
+    var counts = {};
+    ESP_APPR_LIST.forEach(function(a){ counts[a] = 0; });
+    vals.forEach(function(x){ var a = espAppr(x.m); if (counts[a] !== undefined) counts[a]++; });
+    var rows = ESP_APPR_LIST.filter(function(a){ return counts[a] > 0; }).map(function(a){
+      return '<tr><td>' + a + '</td><td>' + counts[a] + '</td><td>' + espPc(counts[a], n) + '</td></tr>';
+    }).join('');
+    return '<div class="card" style="margin:10px 0"><h3 style="margin:0 0 6px">📊 Synthèse de la classe</h3>' +
+      '<p style="margin:0 0 4px">🏆 Plus forte moyenne : <b>' + esc(hi.name) + '</b> · ' + espFmt(hi.m) + (hiT > 0 ? ' <span class="mu">(et ' + hiT + ' autre(s) ex æquo)</span>' : '') + '</p>' +
+      '<p style="margin:0 0 4px">📉 Plus faible moyenne : <b>' + esc(lo.name) + '</b> · ' + espFmt(lo.m) + (loT > 0 ? ' <span class="mu">(et ' + loT + ' autre(s) ex æquo)</span>' : '') + '</p>' +
+      '<p style="margin:0 0 8px">✅ Moyennes ≥ 10 : <b>' + ge10 + '</b> élève(s) sur ' + n + ' · <b>' + espPc(ge10, n) + '</b></p>' +
+      '<div class="wrap"><table><tr><th>Appréciation</th><th>Élèves</th><th>Pourcentage</th></tr>' + rows + '</table></div>' +
+      '<p class="mu">Pourcentages calculés sur les ' + n + ' élève(s) ayant une moyenne.</p></div>';
+  }
   /* Moyenne annuelle = (moyenne 1er semestre + 2 x moyenne 2ème semestre) / 3 */
   function espBilanHtml(c){
     var N = espNotesOf(espCur.key, c.id);
@@ -3150,7 +3328,7 @@ function paperFrD(t){ return new Date(t + 'T12:00:00').toLocaleDateString('fr-FR
         '<td>' + espAppr(d.an) + '</td></tr>';
     });
     if (!studs.length) h += '<tr><td colspan="7" class="mu">Aucun élève dans cette classe.</td></tr>';
-    return h + '</table></div><p class="mu">Moyenne annuelle = (moyenne du 1er semestre + 2 × moyenne du 2ème semestre) / 3, avec les moyennes coefficiées. Rang : 1 = meilleure moyenne annuelle.</p>';
+    return h + '</table></div><p class="mu">Moyenne annuelle = (moyenne du 1er semestre + 2 × moyenne du 2ème semestre) / 3, avec les moyennes coefficiées. Rang : 1 = meilleure moyenne annuelle.</p>' + espSummaryHtml(studs, function(st){ return data[st.id].an; });
   }
   function espClassHtml(c){
     var N = espNotesOf(espCur.key, c.id);
@@ -3187,7 +3365,7 @@ function paperFrD(t){ return new Date(t + 'T12:00:00').toLocaleDateString('fr-FR
         '<td id="ap_' + st.id + '">' + espAppr(cal.mc) + '</td></tr>';
     });
     if (!studs.length) h += '<tr><td colspan="13" class="mu">Aucun élève dans cette classe.</td></tr>';
-    return h + '</table></div>';
+    return h + '</table></div>' + espSummaryHtml(studs, function(st){ return espCalc(rows[st.id] || {}, N.coef).mc; });
   }
   /* ----- Export des tableaux en PDF et Excel (même contenu que le tableau affiché) ----- */
   function espTableData(c){
@@ -3265,9 +3443,9 @@ function paperFrD(t){ return new Date(t + 'T12:00:00').toLocaleDateString('fr-FR
   };
   function renderEsp(){
     var a = $('app'); if (!a) return;
-    var h = '<main><div class="row"><button class="s" onclick="' + (espIsMasterUser() ? 'aeBack()' : 'go(\'home\')') + '">← Retour</button></div>' +
+    var h = '<main><div class="row"><button class="s" onclick="' + (espCanView() ? 'aeBack()' : 'go(\'home\')') + '">← Retour</button></div>' +
             '<div class="card"><h2>🧑‍🏫 Espace professeur</h2>';
-    if (!espCur && !espFor && espIsMasterUser()) {
+    if (!espCur && !espFor && espCanView()) {
       h += espMasterList();
     } else if (!espCur && !espFor && espLastGet() && db.espPass && db.espPass[espLastGet()] && espProfByKey(espLastGet())) {
       espFor = espProfByKey(espLastGet());
@@ -3299,7 +3477,7 @@ function paperFrD(t){ return new Date(t + 'T12:00:00').toLocaleDateString('fr-FR
       h += '<div class="row"><button class="s" onclick="espReset()">Changer de professeur</button></div>';
     } else {
       var sel = espSelOf(espCur.key);
-      if (espIsMaster) h += '<p class="mu" style="margin:0 0 6px">Mode MasterLog : espace du professeur ouvert sans mot de passe.</p>';
+      if (espIsMaster) h += '<p class="mu" style="margin:0 0 6px">' + (espIsMasterUser() ? 'Mode MasterLog' : 'Consultation') + ' : espace du professeur ouvert sans mot de passe.</p>';
       h += '<p style="margin:0 0 4px"><b>' + esc(espCur.nom) + ' ' + esc(espCur.pre) + '</b></p>' +
         '<p class="mu" style="margin:0 0 8px">Matière : <b>' + esc(espCur.mat || '—') + '</b></p>' +
         (espIsMaster ? '<div class="row"><button class="s" onclick="espMasterBack()">← Liste des professeurs</button></div>' : '<div class="row"><button class="s" onclick="espLogout()">Se déconnecter</button></div>');
@@ -3307,23 +3485,30 @@ function paperFrD(t){ return new Date(t + 'T12:00:00').toLocaleDateString('fr-FR
         h += espClassHtml(espClassById(espClassId));
       } else {
         espClassId = null;
+        Object.keys(espReqs()).forEach(function(cid){
+          var rq = espReqs()[cid], c = espClassById(cid);
+          if (!rq || rq.to !== espCur.key || sel.indexOf(cid) < 0 || !c) return;
+          h += '<div class="card" style="margin:8px 0;border-color:#d97706"><b>⚠️ ' + esc(espNameByKey(rq.from)) + ' demande que tu libères la classe ' + esc(c.name || '?') + '.</b>' +
+            '<div class="row"><button onclick="espRelease(\'' + cid + '\')">✔ Libérer la classe</button></div></div>';
+        });
         h += '<h3>Mes classes</h3>';
         var mine = sel.map(function(id){ return espClassById(id); }).filter(Boolean);
-        if (!mine.length) h += '<p class="mu">Aucune classe sélectionnée. Choisis-les dans « Promotions et classes » ci-dessous.</p>';
+        if (!mine.length) h += '<p class="mu">Aucune classe sélectionnée. Touche PROM-CLASS pour choisir tes classes.</p>';
         mine.forEach(function(c){
           h += '<div class="cls"><button onclick="espOpenClass(\'' + c.id + '\')">📘 ' + esc(c.name || '?') + ' · ' + esc(c.annee || '') + ' · ' + esc(pn(c.owner, c.promo || 'A')) + '</button> ' +
             '<button class="d" onclick="espRemove(\'' + c.id + '\')">✕ Supprimer</button></div>';
         });
-        h += '<h3>Promotions et classes</h3>';
-        var groups = espGroups();
-        if (!groups.length) h += '<p class="mu">Aucune promotion pour le moment.</p>';
+        if (!espViewOnly()) h += espAbsHtml();
+        if (!espViewOnly()) h += '<div class="row"><button onclick="espPromToggle()">' + (espPromOpen ? '✖ Fermer PROM-CLASS' : '🏫 PROM-CLASS') + '</button></div>';
+        var groups = espPromOpen ? espGroups() : [];
+        if (espPromOpen && !groups.length) h += '<p class="mu">Aucune promotion pour le moment.</p>';
         groups.forEach(function(g){
           h += '<div class="card" style="margin:8px 0"><b>' + esc(pn(g.owner, g.promo)) + '</b>' +
             (espSgName(g.owner) ? ' <span class="mu">· ' + esc(espSgName(g.owner)) + '</span>' : '');
           g.classes.forEach(function(c){
             var ok = sel.indexOf(c.id) >= 0;
             h += '<div class="cls"><span>' + esc(c.name || '?') + ' · ' + esc(c.annee || '') + '</span> ' +
-              (ok ? '<button class="s" disabled>✔ Sélectionnée</button>' : '<button onclick="espAdd(\'' + c.id + '\')">➕ Sélectionner</button>') + '</div>';
+              (ok ? '<button class="s" disabled>✔ Sélectionnée</button>' : espLockedByOther(c.id) ? espLockBtn(c.id) : '<button onclick="espAdd(\'' + c.id + '\')">➕ Sélectionner</button>') + '</div>';
           });
           h += '</div>';
         });
@@ -3337,7 +3522,7 @@ function paperFrD(t){ return new Date(t + 'T12:00:00').toLocaleDateString('fr-FR
     if (!nav || nav.querySelector('#besp')) return;
     var b = document.createElement('button');
     b.id = 'besp'; b.className = 'hb'; b.textContent = '🧑‍🏫 Espace professeur';
-    b.onclick = function(){ espFor = null; espCur = null; espClassId = null; go('espprof'); };
+    b.onclick = function(){ espFor = null; espCur = null; espClassId = null; espPromOpen = false; go('espprof'); };
     var alt = nav.querySelector('button.hb.alt');
     if (alt && alt.nextSibling) nav.insertBefore(b, alt.nextSibling); else if (alt) nav.appendChild(b); else nav.appendChild(b);
   }
@@ -3349,6 +3534,14 @@ function paperFrD(t){ return new Date(t + 'T12:00:00').toLocaleDateString('fr-FR
     b.onclick = function(){ espIsMaster = true; espCur = null; espFor = null; espClassId = null; go('espprof'); };
     ref.parentNode.insertBefore(b, ref);
   }
+  /* Accueil : le bouton « Recherche d'un élève » reste au-dessus du bouton du Directeur */
+  function homeOrderFix(){
+    var nav = document.querySelector('#home .hside nav'); if (!nav) return;
+    var btns = Array.prototype.slice.call(nav.querySelectorAll('button'));
+    var rech = btns.find(function(b){ return /Recherche d.un élève/i.test(b.textContent); });
+    var dir = btns.find(function(b){ return /Directeur/i.test(b.textContent); });
+    if (rech && dir && rech !== dir && (dir.compareDocumentPosition(rech) & Node.DOCUMENT_POSITION_FOLLOWING)) nav.insertBefore(rech, dir);
+  }
   var prevEspRender = window.render;
   window.render = function(){
     if (view.page === 'espprof') { renderEsp(); return; }
@@ -3356,6 +3549,7 @@ function paperFrD(t){ return new Date(t + 'T12:00:00').toLocaleDateString('fr-FR
     try {
       if (!(typeof me !== 'undefined' && me)) addEspBtn();
       else if (espIsMasterUser()) addEspHeaderBtn();
+      homeOrderFix();
     } catch (e) {}
     return r;
   };
