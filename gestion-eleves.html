@@ -197,6 +197,16 @@ html.big-screen img.logo-home{width:96px;height:96px}
 <style id="zoom-interieur">
 body.acct #app{zoom:1.7}
 @media (max-width:640px){body.acct #app{zoom:1.2}}
+/* Ordinateur : la bande bleue de l'en-tête reste en haut pendant le travail dans le logiciel */
+@media (min-width:900px){
+  body.acct header{position:fixed;left:0;top:0;bottom:0;width:250px;max-width:250px;height:100vh;overflow-y:auto;
+    flex-direction:column;flex-wrap:nowrap;align-items:stretch;justify-content:flex-start;gap:8px;padding:14px 12px;
+    background:linear-gradient(165deg,#1E3A8A 0%,#1D5FBF 45%,#0284C7 100%);border:0;border-image:none;color:#FFFFFF;z-index:30;box-sizing:border-box}
+  body.acct header *{max-width:100%}
+  body.acct header > *:first-child{color:#FFFFFF!important;background:none!important;-webkit-background-clip:border-box!important;background-clip:border-box!important}
+  body.acct header button,body.acct header select,body.acct header input{width:100%}
+  body.acct #app{margin-left:262px;width:calc(100% - 262px);max-width:calc(100% - 262px)}
+}
 /* Mode télé (grand écran, classe big-screen) : texte plus petit */
 html.big-screen body.acct #app{zoom:1.2}
 </style>
@@ -2064,13 +2074,68 @@ function paperFrD(t){ return new Date(t + 'T12:00:00').toLocaleDateString('fr-FR
           '<button class="d" title="Supprimer" onclick="event.stopPropagation();aeDel(\'' + x.id + '\')">🗑</button></span>'
         : '';
       return '<div class="cls" style="cursor:pointer" onclick="aeOpen(\'' + x.id + '\')"><b>' + esc(x.name) + '</b>' +
-        '<span><span class="mu">' + (x.profs || []).length + ' professeur(s)</span>' + (x.pass ? ' 🔒' : '') + (isMaster() && x.pass ? ' <b>🔑 ' + esc(x.pass) + '</b>' : '') + tools + '</span></div>';
+        '<span><span class="mu">' + (x.profs || []).length + ' professeur(s)</span>' + (x.pass ? ' 🔒' : '') + (isMaster() && x.pass ? ' ' + codeBand(x) : '') + tools + '</span></div>';
     }).join('');
     a.innerHTML = '<main><div class="row"><button class="s" onclick="aeBack()">← Retour</button></div>' +
-      '<div class="card"><h2>📚 Les AE</h2><p class="mu">Choisis le compte AE de la matière pour gérer ses professeurs.</p>' +
+      ((me && me.role === 'surv') || isStaffAE() ? allProfsHtml(isStaffAE()) : '') + '<div class="card"><h2>📚 Les AE</h2><p class="mu">AE = Animateur d’établissement. Choisis l’AE de la matière pour gérer ses professeurs.</p>' +
       rows + (isMaster() ? '<div class="row" style="margin-top:12px"><button onclick="aeAdd()">+ Ajouter un AE</button></div>' : '') +
       '</div></main>';
   }
+  /* Provenance affichée : les professeurs du collège (sans ext) = CEG1 ALLADA */
+  function provOf(p){ return p.ext ? (p.prov || '') : 'CEG1 ALLADA'; }
+  /* Professeurs du collège d'abord, puis ceux ajoutés par les AE (toujours en bas) */
+  function orderedProfs(t){
+    var L = t.profs || [];
+    return L.filter(function(p){ return !p.ext; }).concat(L.filter(function(p){ return p.ext; }));
+  }
+  /* Bande du code d'accès avec œil pour afficher / masquer */
+  var eyeOpen = {};
+  window.aeEye = function(id){ eyeOpen[id] = !eyeOpen[id]; render(); };
+  function codeBand(t){
+    if (!t.pass) return '<span>🔑 Code d’accès : <b>pas encore créé</b></span>';
+    var show = !!eyeOpen[t.id];
+    return '<span>🔑 Code d’accès : <b>' + (show ? esc(t.pass) : '••••••') + '</b> ' +
+      '<button class="s" title="Afficher / masquer le code" onclick="event.stopPropagation();aeEye(\'' + t.id + '\')">👁</button></span>';
+  }
+  window.aeEyeInput = function(id){ var i = document.getElementById(id); if (i) i.type = (i.type === 'password') ? 'text' : 'password'; };
+  /* SG : liste de tous les professeurs de toutes les AE (lecture seule) */
+  /* Liste de tous les professeurs : SG (lecture) ; direction, censeur, superviseur, MasterLog (+ présences / absences) */
+  function allProfsHtml(stats){
+    var all = [];
+    aes().forEach(function(x){ orderedProfs(x).forEach(function(p){ all.push({ ae: x.name, p: p }); }); });
+    var td = todayIso();
+    var body = all.map(function(r){
+      var p = r.p;
+      var base = '<td>' + esc(r.ae) + '</td><td>' + esc(p.ordre) + '</td><td>' + esc(p.matricule) + '</td><td>' + esc(p.nom) + '</td><td>' + esc(p.prenoms) +
+        '</td><td>' + esc(p.mat) + '</td><td>' + esc(p.anpe) + '</td><td>' + esc(p.tel) + '</td><td>' + esc(provOf(p)) + '</td>';
+      if (!stats) return '<tr>' + base + '</tr>';
+      var c = countAtt(p, '0000-00-00', '9999-12-31'), st = (p.att || {})[td];
+      return '<tr>' + base + '<td>' + c.P + '</td><td>' + c.A + '</td><td>' + (st === 'P' ? 'Présent' : st === 'A' ? 'Absent' : '—') + '</td></tr>';
+    }).join('');
+    var extra = stats ? '<th>Présences</th><th>Absences</th><th>Aujourd’hui</th>' : '';
+    var span = stats ? 12 : 9;
+    return '<div class="card" style="margin:0 0 12px"><h3 style="margin:0 0 8px">👥 Tous les professeurs (' + all.length + ')</h3>' +
+      '<div class="wrap"><table><tr><th>AE</th><th>N° d’ordre</th><th>Matricule</th><th>Nom</th><th>Prénoms</th><th>Discipline</th><th>ID-ANPE</th><th>Contact</th><th>Provenance</th>' + extra + '</tr>' +
+      (body || '<tr><td colspan="' + span + '" class="mu">Aucun professeur.</td></tr>') + '</table></div></div>';
+  }
+  /* Modification d'un professeur : réservée au MasterLog */
+  var aeEditId = null;
+  window.aeEditStart = function(pid){ if (!isMaster()) return; aeEditId = pid; render(); };
+  window.aeEditStop = function(){ aeEditId = null; render(); };
+  window.aeSaveProf = function(aid, pid){
+    if (!isMaster()) return;
+    var t = aeOne(aid); if (!t) return;
+    var p = (t.profs || []).find(function(x){ return x.id === pid; }); if (!p) return;
+    var g = function(id){ var e = $(id); return e ? String(e.value || '').trim().replace(/\s+/g, ' ') : ''; };
+    var nom = g('ed_nom'), pre = g('ed_prenoms');
+    if (!nom && !pre) return alert('Le nom ou les prénoms sont obligatoires.');
+    var prov = p.ext ? g('ed_prov') : '';
+    if (p.ext && !prov) return alert('La provenance est obligatoire.');
+    p.ordre = g('ed_ordre'); p.matricule = g('ed_matricule'); p.nom = nom; p.prenoms = pre;
+    p.mat = g('ed_mat'); p.anpe = g('ed_anpe'); p.tel = g('ed_tel');
+    if (p.ext) p.prov = prov;
+    aeEditId = null; commit();
+  };
   function renderOne(a, t){
     var back = '<div class="row"><button class="s" onclick="go(\'ae\',{target:null})">← Les AE</button>' +
                (isMaster() ? '' : '') + '</div>';
@@ -2078,35 +2143,49 @@ function paperFrD(t){ return new Date(t + 'T12:00:00').toLocaleDateString('fr-FR
       var body = !t.pass
         ? '<p class="mu">Première connexion : crée ton code d\'accès (minimum 4 chiffres et/ou lettres).</p>' +
           '<input id="aeNc" type="password" placeholder="Ton code (minimum 4 caractères)" style="width:100%;margin-bottom:10px">' +
+          '<button type="button" class="s" style="width:100%;margin-bottom:10px" onclick="aeEyeInput(\'aeNc\')">👁 Afficher / masquer</button>' +
           '<input id="aeNc2" type="password" placeholder="Confirme ton code" style="width:100%;margin-bottom:10px">' +
+          '<button type="button" class="s" style="width:100%;margin-bottom:10px" onclick="aeEyeInput(\'aeNc2\')">👁 Afficher / masquer</button>' +
           '<button style="width:100%" onclick="aeSetup(\'' + t.id + '\')">Créer mon code</button>'
         : '<input id="aePw" type="password" placeholder="Mot de passe" style="width:100%;margin-bottom:10px">' +
+          '<button type="button" class="s" style="width:100%;margin-bottom:10px" onclick="aeEyeInput(\'aePw\')">👁 Afficher / masquer</button>' +
           '<button style="width:100%" onclick="aeUnlock(\'' + t.id + '\')">Se connecter</button>' +
           '<p class="mu" style="margin-top:8px">Code oublié ? Contacte MasterLog.</p>';
       a.innerHTML = '<main>' + back + '<div class="card" style="max-width:420px"><h2>🔒 ' + esc(t.name) + '</h2>' + body + '</div></main>';
       return;
     }
-    var rows = (t.profs || []).map(function(p){
+    var canAdd = t.canAdd !== false;
+    var rows = orderedProfs(t).map(function(p){
+      var inp = function(f){ return '<td><input id="ed_' + f + '" value="' + esc(p[f] || '') + '" style="width:110px;height:34px;padding:2px 6px;font-size:14px"></td>'; };
+      if (isMaster() && aeEditId === p.id) {
+        return '<tr>' + inp('ordre') + inp('matricule') + inp('nom') + inp('prenoms') + inp('mat') + inp('anpe') + inp('tel') +
+          '<td>' + (p.ext ? '<input id="ed_prov" value="' + esc(p.prov || '') + '" style="width:110px;height:34px;padding:2px 6px;font-size:14px">' : 'CEG1 ALLADA') + '</td>' +
+          '<td><button onclick="aeSaveProf(\'' + t.id + '\',\'' + p.id + '\')">💾</button> <button class="s" onclick="aeEditStop()">✖</button></td></tr>';
+      }
       return '<tr><td>' + esc(p.ordre) + '</td><td>' + esc(p.matricule) + '</td><td>' + esc(p.nom) + '</td><td>' + esc(p.prenoms) + '</td><td>' + esc(p.mat) + '</td><td>' + esc(p.anpe) + '</td><td>' + esc(p.tel) +
-        '</td><td><button class="d" onclick="aeDelProf(\'' + t.id + '\',\'' + p.id + '\')">✕</button></td></tr>';
+        '</td><td>' + esc(provOf(p) || '—') + '</td><td>' +
+        (isMaster() ? '<button class="s" title="Modifier" onclick="aeEditStart(\'' + p.id + '\')">✏️</button> <button class="d" title="Supprimer" onclick="aeDelProf(\'' + t.id + '\',\'' + p.id + '\')">✕</button>' : '') + '</td></tr>';
     }).join('');
     a.innerHTML = '<main>' + back +
       '<div class="card"><h2>📚 ' + esc(t.name) + '</h2>' +
-      (isMaster() ? '<div class="row" style="margin:4px 0 10px"><span>🔑 Code d\'accès : <b>' + esc(t.pass || 'pas encore créé') + '</b></span>' +
+      (isMaster() ? '<div class="row" style="margin:4px 0 10px">' + codeBand(t) + '</div>' +
         (t.pass ? ' <button class="s" onclick="aeCode(\'' + t.id + '\')">Réinitialiser le code</button>' : '') + '</div>' : '') +
-      '<div class="row"><button onclick="aeToggleForm()">' + (aeFormOpen ? '✖ Fermer' : '👤 Inscrire un professeur ou importer la liste') + '</button></div>' +
-      (aeFormOpen ? '<div class="card" style="margin:10px 0">' +
-      '<h3>Inscrire un professeur</h3>' +
+      '<div class="card" style="margin:8px 0;padding:10px">' + aeSearchHtml(t) + '</div>' +
+      (isMaster() ? '<div class="row"><label style="display:flex;gap:8px;align-items:center"><input type="checkbox" ' + (t.canAdd !== false ? 'checked ' : '') + 'onchange="aeToggleCanAdd(\'' + t.id + '\',this.checked)"> Permettre à cet AE d’ajouter des professeurs</label></div>' : '') +
+      (canAdd ? '<div class="row"><button onclick="aeToggleForm()">' + (aeFormOpen ? '✖ Fermer' : '➕ Ajouter un Prof') + '</button></div>' : '') +
+      ((aeFormOpen && canAdd) ? '<div class="card" style="margin:10px 0">' +
+      '<h3>Ajouter un professeur</h3>' +
       '<div class="row"><input id="aeOr" placeholder="N° d’ordre" style="width:110px;height:38px;padding:4px 8px;font-size:16px"><input id="aeMa" placeholder="Matricule" style="width:120px;height:38px;padding:4px 8px;font-size:16px"><input id="aeN" placeholder="Nom" style="width:140px;height:38px;padding:4px 8px;font-size:16px"><input id="aeP" placeholder="Prénoms" style="width:140px;height:38px;padding:4px 8px;font-size:16px">' +
       '<input id="aeM" value="' + esc(t.mat) + '" placeholder="Discipline" style="width:125px;height:38px;padding:4px 8px;font-size:16px"><input id="aeAn" placeholder="ID-ANPE" style="width:120px;height:38px;padding:4px 8px;font-size:16px"><input id="aeT" placeholder="Contact" style="width:125px;height:38px;padding:4px 8px;font-size:16px"></div>' +
+      '<div class="row"><input id="aeProv" placeholder="Provenance (établissement d’origine) *" style="width:100%;height:38px;padding:4px 8px;font-size:16px"></div>' +
       '<div class="row"><button onclick="aeAddProf(\'' + t.id + '\')">+ Ajouter</button></div>' +
-      '<h3>Importer la liste des professeurs</h3>' +
-      '<p class="mu">Fichier Excel, CSV ou Word avec l\'entête : N° d’ordre, Matricule, Nom, Prénoms, Discipline, ID-ANPE, Contact. Les cases vides sont acceptées.</p>' +
+      '<h3>Importer une liste</h3>' +
+      '<p class="mu">Fichier Excel, CSV ou Word avec l\'entête : N° d’ordre, Matricule, Nom, Prénoms, Discipline, ID-ANPE, Contact, Provenance. La Provenance est obligatoire ; les autres cases vides sont acceptées.</p>' +
       '<div class="row"><button type="button" onclick="document.getElementById(\'aeF_' + t.id + '\').click()">📥 Importer un fichier Excel ou Word</button><input id="aeF_' + t.id + '" type="file" accept=".xlsx,.xls,.csv,.doc,.docx,application/vnd.openxmlformats-officedocument.spreadsheetml.sheet,application/vnd.openxmlformats-officedocument.wordprocessingml.document,application/msword,application/vnd.ms-excel,text/csv" style="position:absolute;width:1px;height:1px;opacity:0" onchange="aeImport(\'' + t.id + '\',this.files[0]);this.value=\'\'">' +
       '<button class="s" onclick="aeTpl()">📄 Modèle Excel</button> <button class="s" onclick="aeTplWord()">📄 Modèle Word</button></div></div>' : '') +
       '<h3>Liste des professeurs (' + (t.profs || []).length + ')</h3>' +
-      '<div class="wrap"><table><tr><th>N° d’ordre</th><th>Matricule</th><th>Nom</th><th>Prénoms</th><th>Discipline</th><th>ID-ANPE</th><th>Contact</th><th></th></tr>' +
-      (rows || '<tr><td colspan="8" class="mu">Aucun professeur pour le moment.</td></tr>') + '</table></div>' + aeSearchHtml(t) + presenceHtml(t) + vuHtml(t) + rapHtml(t) +
+      '<div class="wrap"><table><tr><th>N° d’ordre</th><th>Matricule</th><th>Nom</th><th>Prénoms</th><th>Discipline</th><th>ID-ANPE</th><th>Contact</th><th>Provenance</th><th></th></tr>' +
+      (rows || '<tr><td colspan="9" class="mu">Aucun professeur pour le moment.</td></tr>') + '</table></div>' + presenceHtml(t) + vuHtml(t) + rapHtml(t) +
       '</div></main>';
   }
 
@@ -2470,14 +2549,19 @@ function paperFrD(t){ return new Date(t + 'T12:00:00').toLocaleDateString('fr-FR
   };
   window.aeAddProf = function(id){
     var t = aeOne(id); if (!t) return;
+    if (t.canAdd === false) return alert('L’ajout de professeurs est fermé pour cet AE par le MasterLog.');
     var nom = ($('aeN').value || '').trim().replace(/\s+/g, ' '), prenoms = ($('aeP').value || '').trim();
+    var prov = ($('aeProv').value || '').trim().replace(/\s+/g, ' ');
     if (!nom && !prenoms) return alert('Le nom ou les prénoms sont obligatoires.');
+    if (!prov) return alert('La provenance du professeur est obligatoire.');
     t.profs = t.profs || [];
     t.profs.push({ id: uid(), ordre: ($('aeOr').value || '').trim(), matricule: ($('aeMa').value || '').trim(), nom: nom, prenoms: prenoms,
-                   mat: ($('aeM').value || '').trim() || t.mat, anpe: ($('aeAn').value || '').trim(), tel: ($('aeT').value || '').trim() });
+                   mat: ($('aeM').value || '').trim() || t.mat, anpe: ($('aeAn').value || '').trim(), tel: ($('aeT').value || '').trim(), prov: prov, ext: true });
     commit();
   };
+  window.aeToggleCanAdd = function(id, v){ var t = aeOne(id); if (!t || !isMaster()) return; t.canAdd = !!v; commit(); };
   window.aeDelProf = function(aid, pid){
+    if (!isMaster()) return alert('Seul le MasterLog peut supprimer un professeur.');
     var t = aeOne(aid); if (!t || !confirm('Retirer ce professeur de la liste ?')) return;
     t.profs = (t.profs || []).filter(function(p){ return p.id !== pid; });
     commit();
@@ -2490,6 +2574,7 @@ function paperFrD(t){ return new Date(t + 'T12:00:00').toLocaleDateString('fr-FR
     if (k.indexOf('matric') === 0) return 'matricule';
     if (k.indexOf('ordre') >= 0) return 'ordre';
     if (k.indexOf('anpe') >= 0) return 'anpe';
+    if (k.indexOf('proven') === 0) return 'prov';
     if (k.indexOf('tel') === 0 || k.indexOf('phone') === 0 || k.indexOf('contact') === 0) return 'tel';
     if (k.indexOf('observ') === 0) return 'obs';
     return '';
@@ -2541,29 +2626,30 @@ function paperFrD(t){ return new Date(t + 'T12:00:00').toLocaleDateString('fr-FR
       if (hdr.indexOf('nom') >= 0) { map = hdr; rows.shift(); }
     }
     t.profs = t.profs || [];
-    var add = 0, skip = 0, bad = 0;
+    var add = 0, skip = 0, bad = 0, noprov = 0;
     rows.forEach(function(r){
       var o = {};
       map.forEach(function(k, i){ if (k) o[k] = String(r[i] === undefined ? '' : r[i]).trim().replace(/\s+/g, ' '); });
       if (!o.nom && !o.prenoms) { bad++; return; }
+      if (!o.prov) { noprov++; return; }
       var key = aeNorm((o.nom || '') + '|' + (o.prenoms || '') + '|' + (o.mat || ''));
       if (t.profs.some(function(p){ return aeNorm(p.nom + '|' + (p.prenoms || '') + '|' + (p.mat || '')) === key; })) { skip++; return; }
-      t.profs.push({ id: uid(), ordre: o.ordre || '', matricule: o.matricule || '', nom: o.nom || '', prenoms: o.prenoms || '', mat: o.mat || t.mat, anpe: o.anpe || '', tel: o.tel || '' });
+      t.profs.push({ id: uid(), ordre: o.ordre || '', matricule: o.matricule || '', nom: o.nom || '', prenoms: o.prenoms || '', mat: o.mat || t.mat, anpe: o.anpe || '', tel: o.tel || '', prov: o.prov, ext: true });
       add++;
     });
     commit();
-    alert(add + ' professeur(s) importé(s) · ' + skip + ' doublon(s) · ' + bad + ' ligne(s) ignorée(s).');
+    alert(add + ' professeur(s) importé(s) · ' + skip + ' doublon(s) · ' + bad + 'ligne(s) ignorée(s) · ' + noprov + ' sans provenance.');
   };
   window.aeTpl = function(){
     if (!window.XLSX) return alert('Module Excel non chargé. Vérifie ta connexion internet.');
-    var ws = XLSX.utils.aoa_to_sheet([['N° d’ordre', 'Matricule', 'Nom', 'Prénoms', 'Discipline', 'ID-ANPE', 'Contact'], ['1', 'MAT001', 'Awa', 'Diallo', 'Français', 'ANPE001', '0190000000']]);
+    var ws = XLSX.utils.aoa_to_sheet([['N° d’ordre', 'Matricule', 'Nom', 'Prénoms', 'Discipline', 'ID-ANPE', 'Contact', 'Provenance'], ['1', 'MAT001', 'Awa', 'Diallo', 'Français', 'ANPE001', '0190000000', 'Lycée Béhanzin']]);
     var wb = XLSX.utils.book_new();
     XLSX.utils.book_append_sheet(wb, ws, 'Professeurs');
     XLSX.writeFile(wb, 'modele-import-professeurs-AE.xlsx');
   };
   window.aeTplWord = function(){
-    var rows = '<tr><td>N° d’ordre</td><td>Matricule</td><td>Nom</td><td>Prénoms</td><td>Discipline</td><td>ID-ANPE</td><td>Contact</td></tr>' +
-               '<tr><td>1</td><td>MAT001</td><td>Awa</td><td>Diallo</td><td>Français</td><td>ANPE001</td><td>0190000000</td></tr>';
+    var rows = '<tr><td>N° d’ordre</td><td>Matricule</td><td>Nom</td><td>Prénoms</td><td>Discipline</td><td>ID-ANPE</td><td>Contact</td><td>Provenance</td></tr>' +
+               '<tr><td>1</td><td>MAT001</td><td>Awa</td><td>Diallo</td><td>Français</td><td>ANPE001</td><td>0190000000</td><td>Lycée Béhanzin</td></tr>';
     var html = '<html xmlns:o="urn:schemas-microsoft-com:office:word" xmlns="http://www.w3.org/TR/REC-html40"><head><meta charset="utf-8"></head><body>' +
                '<table border="1" cellspacing="0" cellpadding="4">' + rows + '</table></body></html>';
     var blob = new Blob(['\ufeff' + html], { type: 'application/msword' });
@@ -2666,6 +2752,610 @@ function paperFrD(t){ return new Date(t + 'T12:00:00').toLocaleDateString('fr-FR
       else if (isMaster()) addHeaderBtn();
       /* DIRECT dans l'espace d'un SG pour MasterLog, Directeur, Censeur et superviseur (la règle du bouton existe déjà dans l'application) */
       if (me && me.role !== 'surv' && view.page === 'app' && !view.direct && view.tab === 'sga' && view.sg && !document.getElementById('dbtn') && typeof addDirect === 'function') addDirect();
+    } catch (e) {}
+    return r;
+  };
+  /* ===== Espace professeur : bouton juste après « Recherche d'un élève » ===== */
+  var espCur = null;   /* professeur connecté */
+  var espClassId = null; /* classe ouverte (tableau des notes) */
+  var espQuery = '';     /* saisie de recherche, conservée si la page se redessine */
+  var espIsMaster = false; /* MasterLog : ouverture d'un espace professeur sans mot de passe */
+  var espSemChoice = 1;  /* 1 = 1er semestre, 2 = 2ème semestre, 3 = bilan annuel */
+  var espFor = null;   /* professeur identifié, en attente de mot de passe */
+  function espNrm(x){ return String(x || '').normalize('NFD').replace(/[\u0300-\u036f]/g, '').toUpperCase().replace(/\s+/g, ' ').trim(); }
+  /* Professeur du collège = provenance vide ou CEG 1 ALLADA (les listes importées par l'AE ont la provenance CEG 1 ALLADA) */
+  function espIsCollege(p){
+    var pv = espNrm(p.prov || '').replace(/[^A-Z0-9]/g, '');
+    return pv === '' || pv === 'CEG1ALLADA';
+  }
+  function espKey(nom, pre){ return espNrm(nom) + '|' + espNrm(pre); }
+  /* Correspondance souple : ordre des mots, accents, tirets et majuscules sans importance */
+  function espTokens(nom, pre){
+    return espNrm(String(nom || '') + ' ' + String(pre || '')).replace(/[^A-Z ]+/g, ' ').split(' ').filter(Boolean).sort().join(' ');
+  }
+  /* Recherche des professeurs du collège : nom + prénoms, dans n'importe quel ordre, avec ou sans accents,
+     et saisie partielle (ex. nom seul ou un seul prénom) si la correspondance est unique */
+  function espCandidates(nom, pre){
+    var want = espTokens(nom, pre).split(' ').filter(Boolean);
+    var out = [], seen = {};
+    if (!want.length) return { list: [], exact: null, ext: false };
+    var exact = null, extHit = false;
+    aes().forEach(function(x){
+      (x.profs || []).forEach(function(p){
+        var have = espTokens(p.nom, p.prenoms).split(' ').filter(Boolean);
+        var same = have.join(' ') === want.join(' ');
+        var fits = want.every(function(t){ return have.some(function(h){ return h === t || (t.length >= 3 && h.indexOf(t) === 0); }); });
+        if (!same && !fits) return;
+        if (!espIsCollege(p)) { if (same) extHit = true; return; }
+        var k = espKey(p.nom, p.prenoms);
+        var rec = { key: k, nom: p.nom, pre: p.prenoms, mat: p.mat || '' };
+        if (same && !exact) exact = rec;
+        if (!seen[k]) { seen[k] = true; out.push(rec); }
+      });
+    });
+    return { list: out, exact: exact, ext: extHit };
+  }
+  function espFind(nom, pre){
+    var c = espCandidates(nom, pre);
+    if (c.exact) return c.exact;
+    if (c.list.length === 1) return c.list[0];
+    return null;
+  }
+  function espStore(){
+    if (!db.espPass) db.espPass = {};
+    if (!db.espSel) db.espSel = {};
+  }
+  function espSelOf(k){ espStore(); if (!db.espSel[k]) db.espSel[k] = []; return db.espSel[k]; }
+  function espClassById(id){ return (db.classes || []).find(function(c){ return c.id === id; }); }
+  function espSgName(owner){ var u = (db.users || []).find(function(x){ return x.id === owner; }); return u ? u.name : ''; }
+  /* Promotions : chaque couple (SG propriétaire, promotion) avec ses classes */
+  function espGroups(){
+    var g = {}, order = [];
+    (db.classes || []).forEach(function(c){
+      var k = (c.owner || '') + '|' + (c.promo || 'A');
+      if (!g[k]) { g[k] = { owner: c.owner, promo: c.promo || 'A', classes: [] }; order.push(k); }
+      g[k].classes.push(c);
+    });
+    return order.map(function(k){
+      g[k].classes.sort(function(a, b){ return String(a.name || '').localeCompare(String(b.name || ''), 'fr'); });
+      return g[k];
+    });
+  }
+  function espProfByKey(key){
+    var found = null;
+    aes().forEach(function(x){
+      (x.profs || []).forEach(function(p){
+        if (!found && espIsCollege(p) && espKey(p.nom, p.prenoms) === key) found = { key: key, nom: p.nom, pre: p.prenoms, mat: p.mat || '' };
+      });
+    });
+    return found;
+  }
+  /* Recherche en direct : affiche les noms correspondants, sans recharger la page */
+  function espResultsHtml(){
+    var q = String(espQuery || '').trim();
+    if (!q) return '';
+    var list = espPrefixSearch(q).slice(0, 20);
+    if (!list.length) return '<p class="mu">Aucun nom trouvé.</p>';
+    return list.map(function(r){
+      return '<div class="cls"><button onclick="espPick(\'' + r.key + '\')">' + esc(r.nom + ' ' + r.pre) + ' · ' + esc(r.mat || '—') + '</button></div>';
+    }).join('');
+  }
+  window.espSearch = function(q){
+    espQuery = String(q || '');
+    var box = document.getElementById('espRes'); if (box) box.innerHTML = espResultsHtml();
+  };
+  /* Recherche dès la première lettre : chaque mot saisi doit commencer un mot du nom ou des prénoms */
+  function espPrefixSearch(q){
+    var want = espTokens(q, '').split(' ').filter(Boolean);
+    if (!want.length) return [];
+    var out = [], seen = {};
+    aes().forEach(function(x){
+      (x.profs || []).forEach(function(p){
+        if (!espIsCollege(p)) return;
+        var k = espKey(p.nom, p.prenoms);
+        if (seen[k]) return;
+        var have = espTokens(p.nom, p.prenoms).split(' ').filter(Boolean);
+        var ok = want.every(function(t){ return have.some(function(h){ return h.indexOf(t) === 0; }); });
+        if (ok) { seen[k] = true; out.push({ key: k, nom: p.nom, pre: p.prenoms, mat: p.mat || '' }); }
+      });
+    });
+    out.sort(function(a, b){ return String(a.nom).localeCompare(String(b.nom), 'fr') || String(a.pre).localeCompare(String(b.pre), 'fr'); });
+    return out;
+  }
+  /* Le professeur touche son nom : création ou connexion de son mot de passe */
+  window.espPick = function(key){
+    var f = espProfByKey(key);
+    if (!f) return alert('Une erreur s’est produite. Recommence la recherche.');
+    espQuery = ''; espFor = f; espCur = null; render();
+  };
+  window.espIdent = function(){
+    var nom = ($('espN') || {}).value || '', pre = ($('espP') || {}).value || '';
+    if (!nom.trim() && !pre.trim()) return alert('Entre ton nom et tes prénoms.');
+    var c = espCandidates(nom, pre);
+    var f = c.exact || (c.list.length === 1 ? c.list[0] : null);
+    if (f) { espFor = f; render(); return; }
+    if (c.list.length > 1) return alert('Plusieurs professeurs correspondent à ce nom. Saisis ton nom et tes prénoms complets, tels qu’écrits dans la liste de ton AE.');
+    if (c.ext) return alert('Les professeurs ajoutés par une AE ne peuvent pas créer d’espace professeur.');
+    alert('Nom introuvable. Vérifie l’orthographe (nom et prénoms) ou demande au MasterLog de vérifier ton nom dans la liste de ton AE.');
+  };
+  /* Un mot de passe n'existe qu'une seule fois dans l'application */
+  function espPassTaken(pw, exceptKey){
+    espStore();
+    return Object.keys(db.espPass).some(function(k){ return k !== exceptKey && db.espPass[k] === pw; });
+  }
+  window.espCreate = function(){
+    var a1 = (($('espNc') || {}).value || ''), a2 = (($('espNc2') || {}).value || '');
+    if (a1.length < 4) return alert('Le mot de passe doit contenir au moins 4 caractères.');
+    if (a1 !== a2) return alert('Les deux mots de passe ne correspondent pas.');
+    espStore();
+    if (espPassTaken(a1, espFor.key)) return alert('Une erreur s’est produite.');
+    db.espPass[espFor.key] = a1;
+    espLastSet(espFor.key);
+    espCur = espFor; espFor = null; try { save(); } catch (e) {} render();
+  };
+  window.espLogin = function(){
+    var pw = (($('espPw') || {}).value || '');
+    espStore();
+    if (!espFor || pw !== db.espPass[espFor.key]) return alert('Mot de passe incorrect.');
+    espLastSet(espFor.key);
+    espCur = espFor; espFor = null; render();
+  };
+  window.espLogout = function(){ espCur = null; espFor = null; espClassId = null; espIsMaster = false; render(); };
+  function espLastGet(){ try { return localStorage.getItem('gestion_esp_last') || ''; } catch (e) { return ''; } }
+  function espLastSet(k){ try { if (k) localStorage.setItem('gestion_esp_last', k); else localStorage.removeItem('gestion_esp_last'); } catch (e) {} }
+  function espIsMasterUser(){ return typeof me !== 'undefined' && !!me && me.role === 'master'; }
+  /* Liste des professeurs du collège pour le MasterLog */
+  function espMasterList(){
+    var seen = {}, list = [];
+    aes().forEach(function(x){
+      (x.profs || []).forEach(function(p){
+        if (!espIsCollege(p)) return;
+        var k = espKey(p.nom, p.prenoms);
+        if (seen[k]) return; seen[k] = true;
+        list.push({ key: k, nom: p.nom, pre: p.prenoms, mat: p.mat || '' });
+      });
+    });
+    list.sort(function(a, b){ return String(a.nom).localeCompare(String(b.nom), 'fr') || String(a.pre).localeCompare(String(b.pre), 'fr'); });
+    espStore();
+    var h = '<div class="card" style="margin:8px 0"><h3 style="margin:0 0 6px">👥 Espaces des professeurs</h3>' +
+      '<p class="mu" style="margin:0 0 8px">Ouverture sans mot de passe pour le MasterLog.</p>';
+    list.forEach(function(e){
+      var has = !!db.espPass[e.key];
+      var nSel = (db.espSel[e.key] || []).length;
+      h += '<div class="cls" style="flex-wrap:wrap"><button onclick="espMasterOpen(\'' + e.key + '\')">' + esc(e.nom + ' ' + e.pre) + ' · ' + esc(e.mat || '—') + '</button> ' +
+        '<span class="mu">' + (has ? 'compte créé · ' + nSel + ' classe(s)' : 'pas encore créé') + '</span>';
+      if (has) {
+        h += ' <span style="display:flex;gap:6px;flex-wrap:wrap;margin-top:4px">' +
+          '<button class="s" title="Réinitialiser" onclick="espMasterReset(\'' + e.key + '\')">🔄 Réinitialiser</button>' +
+          '<button class="s" title="Changer le mot de passe" onclick="espMasterSetPass(\'' + e.key + '\')">🔑 Changer le mot de passe</button>' +
+          '<button class="d" title="Supprimer le compte" onclick="espMasterDelete(\'' + e.key + '\')">🗑 Supprimer le compte</button></span>';
+      }
+      h += '</div>';
+    });
+    if (!list.length) h += '<p class="mu">Aucun professeur du collège dans les listes des AE.</p>';
+    return h + '</div>';
+  }
+  window.espMasterOpen = function(key){
+    if (!espIsMasterUser()) return;
+    var found = null;
+    aes().forEach(function(x){
+      (x.profs || []).forEach(function(p){
+        if (!found && espIsCollege(p) && espKey(p.nom, p.prenoms) === key) found = { key: key, nom: p.nom, pre: p.prenoms, mat: p.mat || '' };
+      });
+    });
+    if (!found) return;
+    espCur = found; espFor = null; espClassId = null; espIsMaster = true; render();
+  };
+  window.espMasterBack = function(){ espCur = null; espFor = null; espClassId = null; espIsMaster = false; render(); };
+  /* Actions du MasterLog sur les comptes (les notes des professeurs sont conservées) */
+  window.espMasterReset = function(key){
+    if (!espIsMasterUser()) return;
+    espStore();
+    if (!db.espPass[key]) return;
+    if (!confirm('Réinitialiser le compte ? Le professeur devra recréer son mot de passe à sa prochaine connexion.')) return;
+    delete db.espPass[key];
+    try { save(); } catch (e) {}
+    render();
+  };
+  window.espMasterSetPass = function(key){
+    if (!espIsMasterUser()) return;
+    espStore();
+    var a = prompt('Nouveau mot de passe (minimum 4 caractères) :');
+    if (a === null) return;
+    a = String(a);
+    if (a.length < 4) return alert('Le mot de passe doit contenir au moins 4 caractères.');
+    var b = prompt('Confirme le nouveau mot de passe :');
+    if (b === null) return;
+    if (b !== a) return alert('Les deux mots de passe ne correspondent pas.');
+    if (espPassTaken(a, key)) return alert('Une erreur s’est produite.');
+    db.espPass[key] = a;
+    try { save(); } catch (e) {}
+    alert('Mot de passe changé.');
+    render();
+  };
+  window.espMasterDelete = function(key){
+    if (!espIsMasterUser()) return;
+    espStore();
+    if (!confirm('Supprimer le compte de ce professeur ? Son mot de passe et ses classes sélectionnées seront effacés. Ses notes sont conservées.')) return;
+    delete db.espPass[key];
+    delete db.espSel[key];
+    if (espCur && espCur.key === key) { espCur = null; espClassId = null; espIsMaster = false; }
+    try { save(); } catch (e) {}
+    render();
+  };
+  window.espReset = function(){ espLastSet(''); espCur = null; espFor = null; espClassId = null; render(); };
+  window.espAdd = function(id){
+    if (!espCur) return;
+    var sel = espSelOf(espCur.key);
+    if (sel.indexOf(id) >= 0) return alert('Cette classe est déjà sélectionnée.');
+    sel.push(id); try { save(); } catch (e) {} render();
+  };
+  window.espRemove = function(id){
+    if (!espCur || !confirm('Supprimer cette classe de ta sélection ?')) return;
+    var sel = espSelOf(espCur.key), i = sel.indexOf(id);
+    if (i >= 0) sel.splice(i, 1);
+    try { save(); } catch (e) {} render();
+  };
+  /* ----- Notes : moyennes ----- */
+  function espNotesOf(key, cid){
+    if (!db.espNotes) db.espNotes = {};
+    if (!db.espNotes[key]) db.espNotes[key] = {};
+    if (!db.espNotes[key][cid]) db.espNotes[key][cid] = { coef: 1, rows: {}, rows2: {} };
+    if (!db.espNotes[key][cid].rows2) db.espNotes[key][cid].rows2 = {};
+    return db.espNotes[key][cid];
+  }
+  function espNum(v){ if (v === '' || v == null) return null; var n = Number(v); return isNaN(n) ? null : n; }
+  function espAvg(vals){
+    var v = vals.map(espNum).filter(function(x){ return x !== null; });
+    return v.length ? v.reduce(function(a, b){ return a + b; }, 0) / v.length : null;
+  }
+  /* MI = moyenne des interrogations ; Moy non coef = moyenne de MI, D1, D2 ; Moy coef = Moy non coef x coefficient de la matière */
+  function espCalc(r, coef){
+    r = r || {};
+    var mi = espAvg([r.i1, r.i2, r.i3, r.i4]);
+    var mn = null;
+    /* La moyenne non coefficiée n'est calculée que si les deux devoirs sont remplis */
+    if (mi !== null && espNum(r.d1) !== null && espNum(r.d2) !== null) {
+      mn = (mi + espNum(r.d1) + espNum(r.d2)) / 3;
+    }
+    var mc = mn === null ? null : mn * (Number(coef) || 0);
+    return { mi: mi, mn: mn, mc: mc };
+  }
+  /* Troncature à 2 décimales (sans arrondi) : 13,996 devient 13,99 */
+  function espTrunc(x){ return Math.floor(x * 100 + 1e-9) / 100; }
+  function espFmt(x){ return x === null || x === undefined ? '—' : espTrunc(x).toFixed(2); }
+  function espStudents(cid){
+    return (db.students || []).filter(function(s){ return s.cid === cid; })
+      .sort(function(a, b){ return String(a.name || '').localeCompare(String(b.name || ''), 'fr'); });
+  }
+  window.espOpenClass = function(id){ espClassId = id; espSemChoice = 1; render(); };
+  window.espSem = function(n){ espSemChoice = n; render(); };
+  window.espBackClasses = function(){ espClassId = null; render(); };
+  function espRowsOf(N, sem){ return sem === 2 ? N.rows2 : N.rows; }
+  window.espSetNote = function(cid, sid, f, el, sem){
+    if (!espCur) return;
+    var N = espNotesOf(espCur.key, cid);
+    var rows = espRowsOf(N, sem);
+    var r = rows[sid] || (rows[sid] = {});
+    var raw = String(el.value).trim().replace(',', '.');
+    if (raw === '') { r[f] = ''; }
+    else {
+      var n = espNum(raw);
+      if (n === null || n < 0 || n > 20) {
+        alert('Note refusée : la note doit être comprise entre 0 et 20.');
+        el.value = (r[f] === '' || r[f] === undefined) ? '' : r[f];
+        return;
+      }
+      r[f] = n;
+    }
+    try { save(); } catch (e) {}
+    var c = espCalc(r, N.coef);
+    var set = function(id, x){ var t = document.getElementById(id); if (t) t.textContent = espFmt(x); };
+    set('mi_' + sid, c.mi); set('mn_' + sid, c.mn); set('mc_' + sid, c.mc);
+    var ap = document.getElementById('ap_' + sid); if (ap) ap.textContent = espAppr(c.mc);
+    var studsNow = espStudents(cid);
+    var rkNow = espRankMap(studsNow, function(st){ return espCalc(espRowsOf(N, sem)[st.id] || {}, N.coef).mc; });
+    studsNow.forEach(function(st){ var el = document.getElementById('rk_' + st.id); if (el) el.textContent = rkNow[st.id]; });
+  };
+  window.espSetAppr = function(cid, sid, sem, el){
+    if (!espCur) return;
+    var N = espNotesOf(espCur.key, cid);
+    var txt = String(el.value || '').trim().slice(0, 150);
+    if (sem === 3) { if (!N.apBil) N.apBil = {}; N.apBil[sid] = txt; }
+    else { var rows = espRowsOf(N, sem); var r = rows[sid] || (rows[sid] = {}); r.ap = txt; }
+    try { save(); } catch (e) {}
+  };
+  window.espSetCoef = function(cid, v){
+    if (!espCur) return;
+    var N = espNotesOf(espCur.key, cid);
+    var n = espNum(v);
+    N.coef = n === null ? 0 : Math.max(0, n);
+    try { save(); } catch (e) {}
+    render();
+  };
+  /* Rang : 1 = meilleure valeur ; égalités = même rang ; sans valeur = « — » */
+  function espRankMap(studs, valOf){
+    var vals = {}, out = {};
+    studs.forEach(function(st){ vals[st.id] = valOf(st); });
+    studs.forEach(function(st){
+      var v = vals[st.id];
+      out[st.id] = (v === null || v === undefined) ? '—' :
+        1 + studs.filter(function(o){ return vals[o.id] !== null && vals[o.id] !== undefined && vals[o.id] > v; }).length;
+    });
+    return out;
+  }
+  /* Appréciation automatique selon la moyenne (arrondie à 2 décimales) */
+  function espAppr(m){
+    if (m === null || m === undefined) return '—';
+    var x = espTrunc(m);
+    if (x < 3) return 'Médiocre';
+    if (x < 6) return 'Très faible';
+    if (x < 8) return 'Faible';
+    if (x < 10) return 'Insuffisant';
+    if (x < 12) return 'Passable';
+    if (x < 14) return 'Assez bien';
+    if (x < 16) return 'Bien';
+    if (x < 18) return 'Très bien';
+    return 'Excellent';
+  }
+  /* Moyenne coefficiée d'un élève pour un semestre (null si incomplète) */
+  function espSemMc(N, sid, sem){
+    return espCalc(espRowsOf(N, sem)[sid] || {}, N.coef).mc;
+  }
+  /* Tri des tableaux : ordre de mérite (meilleure moyenne en premier) ou ordre alphabétique */
+  var espSortMode = 'alpha';
+  window.espSortSet = function(m){ espSortMode = m; render(); };
+  function espSortBar(){
+    return '<div class="row">' +
+      '<button class="' + (espSortMode === 'merit' ? 'hb' : 's') + '" onclick="espSortSet(\'merit\')">🏆 Ordre de mérite</button> ' +
+      '<button class="' + (espSortMode === 'alpha' ? 'hb' : 's') + '" onclick="espSortSet(\'alpha\')">🔤 Ordre alphabétique</button> ' +
+      '<button class="s" onclick="espExportPdf()">📄 PDF</button> ' +
+      '<button class="s" onclick="espExportXlsx()">📗 Excel</button></div>';
+  }
+  /* Ordre d'affichage ; les élèves sans moyenne vont en bas en mode mérite */
+  function espOrdered(studs, keyOf){
+    var list = studs.slice();
+    if (espSortMode === 'merit') {
+      list.sort(function(a, b){
+        var ka = keyOf(a), kb = keyOf(b);
+        if (ka === null && kb === null) return 0;
+        if (ka === null) return 1;
+        if (kb === null) return -1;
+        return kb - ka;
+      });
+    }
+    return list;
+  }
+  /* Moyenne annuelle = (moyenne 1er semestre + 2 x moyenne 2ème semestre) / 3 */
+  function espBilanHtml(c){
+    var N = espNotesOf(espCur.key, c.id);
+    var studs = espStudents(c.id);
+    var data = {};
+    studs.forEach(function(st){
+      var m1 = espSemMc(N, st.id, 1), m2 = espSemMc(N, st.id, 2);
+      data[st.id] = { m1: m1, m2: m2, an: (m1 !== null && m2 !== null) ? (m1 + 2 * m2) / 3 : null };
+    });
+    var rankOf = {};
+    studs.forEach(function(st){
+      var an = data[st.id].an;
+      rankOf[st.id] = an === null ? null : 1 + studs.filter(function(o){ return data[o.id].an !== null && data[o.id].an > an; }).length;
+    });
+    var list = espOrdered(studs, function(st){ return data[st.id].an; });
+    var num = {}; studs.forEach(function(st, i){ num[st.id] = i + 1; });
+    var h = espSortBar() + '<div class="wrap"><table><tr><th>N° d’ordre</th><th>Nom et prénoms</th><th>Moy 1er sem.</th><th>Moy 2ème sem.</th><th>Moy annuelle</th><th>Rang</th><th>Appréciation (automatique)</th></tr>';
+    list.forEach(function(st){
+      var d = data[st.id];
+      h += '<tr><td>' + num[st.id] + '</td><td>' + esc(st.name || '') + '</td><td>' + espFmt(d.m1) + '</td><td>' + espFmt(d.m2) +
+        '</td><td><b>' + espFmt(d.an) + '</b></td><td>' + (rankOf[st.id] === null ? '—' : rankOf[st.id]) + '</td>' +
+        '<td>' + espAppr(d.an) + '</td></tr>';
+    });
+    if (!studs.length) h += '<tr><td colspan="7" class="mu">Aucun élève dans cette classe.</td></tr>';
+    return h + '</table></div><p class="mu">Moyenne annuelle = (moyenne du 1er semestre + 2 × moyenne du 2ème semestre) / 3, avec les moyennes coefficiées. Rang : 1 = meilleure moyenne annuelle.</p>';
+  }
+  function espClassHtml(c){
+    var N = espNotesOf(espCur.key, c.id);
+    var sem = espSemChoice;
+    var tab = function(n, label){ return '<button class="' + (sem === n ? 'hb' : 's') + '" onclick="espSem(' + n + ')">' + label + '</button> '; };
+    var h = '<div class="row"><button class="s" onclick="espBackClasses()">← Mes classes</button></div>' +
+      '<h3 style="margin:8px 0">📘 ' + esc(c.name || '?') + ' · ' + esc(c.annee || '') + ' · ' + esc(pn(c.owner, c.promo || 'A')) + '</h3>' +
+      '<div class="row"><label>Coefficient de la classe : <input type="number" min="0" step="0.5" value="' + N.coef + '" style="width:90px;height:34px" ' +
+      'onchange="espSetCoef(\'' + c.id + '\',this.value)"></label></div>' +
+      '<div class="row">' + tab(1, '1er Semestre') + tab(2, '2ème Semestre') + tab(3, 'Bilan annuel') + '</div>';
+    if (sem === 3) return h + espBilanHtml(c);
+    var rows = espRowsOf(N, sem);
+    var studs = espStudents(c.id);
+    var inp = function(sid, f, r){
+      var val = (r[f] === '' || r[f] === undefined || r[f] === null) ? '' : r[f];
+      return '<td><input type="number" min="0" max="20" step="0.25" value="' + val + '" style="width:64px;height:34px" ' +
+        'onchange="espSetNote(\'' + c.id + '\',\'' + sid + '\',\'' + f + '\',this,' + sem + ')"></td>';
+    };
+    var mcOf = function(st){ return espCalc(rows[st.id] || {}, N.coef).mc; };
+    var list = espOrdered(studs, mcOf);
+    var rk = espRankMap(studs, mcOf);
+    var num = {}; studs.forEach(function(st, i){ num[st.id] = i + 1; });
+    h += espSortBar() + '<div class="wrap"><table><tr><th>N° d’ordre</th><th>Nom et prénoms</th><th>I1</th><th>I2</th><th>I3</th><th>I4</th><th>MI</th><th>D1</th><th>D2</th><th>Moy non coef</th><th>Moy coef</th><th>Rang</th><th>Appréciation (automatique)</th></tr>';
+    list.forEach(function(st){
+      var r = rows[st.id] || {};
+      var cal = espCalc(r, N.coef);
+      h += '<tr><td>' + num[st.id] + '</td><td>' + esc(st.name || '') + '</td>' +
+        inp(st.id, 'i1', r) + inp(st.id, 'i2', r) + inp(st.id, 'i3', r) + inp(st.id, 'i4', r) +
+        '<td id="mi_' + st.id + '">' + espFmt(cal.mi) + '</td>' +
+        inp(st.id, 'd1', r) + inp(st.id, 'd2', r) +
+        '<td id="mn_' + st.id + '">' + espFmt(cal.mn) + '</td>' +
+        '<td id="mc_' + st.id + '">' + espFmt(cal.mc) + '</td>' +
+        '<td id="rk_' + st.id + '">' + rk[st.id] + '</td>' +
+        '<td id="ap_' + st.id + '">' + espAppr(cal.mc) + '</td></tr>';
+    });
+    if (!studs.length) h += '<tr><td colspan="13" class="mu">Aucun élève dans cette classe.</td></tr>';
+    return h + '</table></div>';
+  }
+  /* ----- Export des tableaux en PDF et Excel (même contenu que le tableau affiché) ----- */
+  function espTableData(c){
+    var N = espNotesOf(espCur.key, c.id), sem = espSemChoice;
+    var studs = espStudents(c.id), num = {};
+    studs.forEach(function(st, i){ num[st.id] = i + 1; });
+    var v = function(x){ return (x === '' || x === undefined || x === null) ? '' : x; };
+    var out = { coef: N.coef, title: '', head: [], body: [] };
+    if (sem === 3) {
+      out.title = 'Bilan annuel';
+      var data = {};
+      studs.forEach(function(st){
+        var m1 = espSemMc(N, st.id, 1), m2 = espSemMc(N, st.id, 2);
+        data[st.id] = { m1: m1, m2: m2, an: (m1 !== null && m2 !== null) ? (m1 + 2 * m2) / 3 : null };
+      });
+      var rankOf = {};
+      studs.forEach(function(st){
+        var an = data[st.id].an;
+        rankOf[st.id] = an === null ? '—' : 1 + studs.filter(function(o){ return data[o.id].an !== null && data[o.id].an > an; }).length;
+      });
+      out.head = ['N° d’ordre', 'Nom et prénoms', 'Moy 1er sem.', 'Moy 2ème sem.', 'Moy annuelle', 'Rang', 'Appréciation'];
+      espOrdered(studs, function(st){ return data[st.id].an; }).forEach(function(st){
+        var d = data[st.id];
+        out.body.push([num[st.id], st.name || '', espFmt(d.m1), espFmt(d.m2), espFmt(d.an), rankOf[st.id], espAppr(d.an)]);
+      });
+    } else {
+      var rows = espRowsOf(N, sem);
+      out.title = sem === 2 ? '2ème Semestre' : '1er Semestre';
+      var mcOf2 = function(st){ return espCalc(rows[st.id] || {}, N.coef).mc; };
+      var rk2 = espRankMap(studs, mcOf2);
+      out.head = ['N° d’ordre', 'Nom et prénoms', 'I1', 'I2', 'I3', 'I4', 'MI', 'D1', 'D2', 'Moy non coef', 'Moy coef', 'Rang', 'Appréciation'];
+      espOrdered(studs, mcOf2).forEach(function(st){
+        var r = rows[st.id] || {}, cal = espCalc(r, N.coef);
+        out.body.push([num[st.id], st.name || '', v(r.i1), v(r.i2), v(r.i3), v(r.i4), espFmt(cal.mi), v(r.d1), v(r.d2), espFmt(cal.mn), espFmt(cal.mc), rk2[st.id], espAppr(cal.mc)]);
+      });
+    }
+    return out;
+  }
+  function espFileName(c, title, ext){
+    return 'notes_' + (c.name || 'classe') + '_' + title + '.' + ext;
+  }
+  function espInfoLine(c, coef){
+    return 'Professeur : ' + espCur.nom + ' ' + espCur.pre + ' · Matière : ' + (espCur.mat || '—') +
+      ' · Classe : ' + (c.name || '') + ' · Année : ' + (c.annee || '') + ' · Coefficient : ' + coef +
+      ' · Tri : ' + (espSortMode === 'merit' ? 'ordre de mérite' : 'ordre alphabétique');
+  }
+  window.espExportPdf = function(){
+    var c = espClassById(espClassId); if (!c || !espCur) return;
+    var JS = window.jspdf && window.jspdf.jsPDF;
+    if (!JS) return alert('La bibliothèque PDF n’est pas chargée. Vérifiez votre connexion internet.');
+    var d = espTableData(c);
+    var doc = new JS({ orientation: 'landscape', unit: 'mm', format: 'a4' });
+    var W = doc.internal.pageSize.getWidth();
+    doc.setFillColor(29, 95, 191); doc.rect(0, 0, W, 6, 'F');
+    doc.setFont('helvetica', 'bold'); doc.setFontSize(14); doc.setTextColor(20, 20, 20);
+    doc.text(d.title + ' · ' + (c.name || ''), 14, 18);
+    doc.setFont('helvetica', 'normal'); doc.setFontSize(9); doc.setTextColor(80, 90, 120);
+    doc.text(espInfoLine(c, d.coef), 14, 24);
+    doc.autoTable({
+      head: [d.head], body: d.body, startY: 29,
+      styles: { fontSize: 8, cellPadding: 2, lineColor: [90, 110, 160], lineWidth: 0.2, textColor: [0, 0, 0] },
+      headStyles: { fillColor: [204, 224, 247], textColor: [0, 0, 0], fontStyle: 'bold', lineColor: [90, 110, 160], lineWidth: 0.3 },
+      alternateRowStyles: { fillColor: [255, 255, 255] }
+    });
+    doc.save(espFileName(c, d.title, 'pdf'));
+  };
+  window.espExportXlsx = function(){
+    var c = espClassById(espClassId); if (!c || !espCur) return;
+    if (typeof XLSX === 'undefined') return alert('La bibliothèque Excel n’est pas chargée. Vérifiez votre connexion internet.');
+    var d = espTableData(c);
+    var aoa = [[d.title + ' · ' + (c.name || '')], [espInfoLine(c, d.coef)], [], d.head].concat(d.body);
+    var wb = XLSX.utils.book_new();
+    XLSX.utils.book_append_sheet(wb, XLSX.utils.aoa_to_sheet(aoa), d.title.slice(0, 31));
+    XLSX.writeFile(wb, espFileName(c, d.title, 'xlsx'));
+  };
+  function renderEsp(){
+    var a = $('app'); if (!a) return;
+    var h = '<main><div class="row"><button class="s" onclick="' + (espIsMasterUser() ? 'aeBack()' : 'go(\'home\')') + '">← Retour</button></div>' +
+            '<div class="card"><h2>🧑‍🏫 Espace professeur</h2>';
+    if (!espCur && !espFor && espIsMasterUser()) {
+      h += espMasterList();
+    } else if (!espCur && !espFor && espLastGet() && db.espPass && db.espPass[espLastGet()] && espProfByKey(espLastGet())) {
+      espFor = espProfByKey(espLastGet());
+      h += '<p><b>' + esc(espFor.nom) + ' ' + esc(espFor.pre) + '</b> · ' + esc(espFor.mat || '—') + '</p>' +
+        '<p class="mu">Entre ton mot de passe.</p>';
+      h += '<div class="row"><input id="espPw" type="password" placeholder="Mot de passe" style="width:100%;height:40px"></div>' +
+        '<div class="row"><button type="button" class="s" onclick="aeEyeInput(\'espPw\')">👁 Afficher / masquer</button></div>' +
+        '<div class="row"><button onclick="espLogin()">Se connecter</button></div>' +
+        '<div class="row"><button class="s" onclick="espReset()">Ce n’est pas moi</button></div>';
+    } else if (!espCur && !espFor) {
+      h += '<p class="mu">Tape ton nom pour le rechercher, puis touche ton nom.</p>' +
+        '<div class="row"><input id="espQ" value="' + esc(espQuery) + '" placeholder="Rechercher mon nom" autocomplete="off" oninput="espSearch(this.value)" style="width:100%;height:40px"></div>' +
+        '<div id="espRes">' + espResultsHtml() + '</div>';
+    } else if (!espCur) {
+      espStore();
+      h += '<p><b>' + esc(espFor.nom) + ' ' + esc(espFor.pre) + '</b></p>';
+      if (!db.espPass[espFor.key]) {
+        h += '<p class="mu">Première connexion : crée ton mot de passe (minimum 4 caractères).</p>' +
+          '<div class="row"><input id="espNc" type="password" placeholder="Ton mot de passe" style="width:100%;height:40px"></div>' +
+          '<div class="row"><button type="button" class="s" onclick="aeEyeInput(\'espNc\')">👁 Afficher / masquer</button></div>' +
+          '<div class="row"><input id="espNc2" type="password" placeholder="Confirme ton mot de passe" style="width:100%;height:40px"></div>' +
+          '<div class="row"><button type="button" class="s" onclick="aeEyeInput(\'espNc2\')">👁 Afficher / masquer</button></div>' +
+          '<div class="row"><button onclick="espCreate()">Confirmer mon mot de passe</button></div>';
+      } else {
+        h += '<div class="row"><input id="espPw" type="password" placeholder="Mot de passe" style="width:100%;height:40px"></div>' +
+          '<div class="row"><button type="button" class="s" onclick="aeEyeInput(\'espPw\')">👁 Afficher / masquer</button></div>' +
+          '<div class="row"><button onclick="espLogin()">Se connecter</button></div>';
+      }
+      h += '<div class="row"><button class="s" onclick="espReset()">Changer de professeur</button></div>';
+    } else {
+      var sel = espSelOf(espCur.key);
+      if (espIsMaster) h += '<p class="mu" style="margin:0 0 6px">Mode MasterLog : espace du professeur ouvert sans mot de passe.</p>';
+      h += '<p style="margin:0 0 4px"><b>' + esc(espCur.nom) + ' ' + esc(espCur.pre) + '</b></p>' +
+        '<p class="mu" style="margin:0 0 8px">Matière : <b>' + esc(espCur.mat || '—') + '</b></p>' +
+        (espIsMaster ? '<div class="row"><button class="s" onclick="espMasterBack()">← Liste des professeurs</button></div>' : '<div class="row"><button class="s" onclick="espLogout()">Se déconnecter</button></div>');
+      if (espClassId && espClassById(espClassId) && sel.indexOf(espClassId) >= 0) {
+        h += espClassHtml(espClassById(espClassId));
+      } else {
+        espClassId = null;
+        h += '<h3>Mes classes</h3>';
+        var mine = sel.map(function(id){ return espClassById(id); }).filter(Boolean);
+        if (!mine.length) h += '<p class="mu">Aucune classe sélectionnée. Choisis-les dans « Promotions et classes » ci-dessous.</p>';
+        mine.forEach(function(c){
+          h += '<div class="cls"><button onclick="espOpenClass(\'' + c.id + '\')">📘 ' + esc(c.name || '?') + ' · ' + esc(c.annee || '') + ' · ' + esc(pn(c.owner, c.promo || 'A')) + '</button> ' +
+            '<button class="d" onclick="espRemove(\'' + c.id + '\')">✕ Supprimer</button></div>';
+        });
+        h += '<h3>Promotions et classes</h3>';
+        var groups = espGroups();
+        if (!groups.length) h += '<p class="mu">Aucune promotion pour le moment.</p>';
+        groups.forEach(function(g){
+          h += '<div class="card" style="margin:8px 0"><b>' + esc(pn(g.owner, g.promo)) + '</b>' +
+            (espSgName(g.owner) ? ' <span class="mu">· ' + esc(espSgName(g.owner)) + '</span>' : '');
+          g.classes.forEach(function(c){
+            var ok = sel.indexOf(c.id) >= 0;
+            h += '<div class="cls"><span>' + esc(c.name || '?') + ' · ' + esc(c.annee || '') + '</span> ' +
+              (ok ? '<button class="s" disabled>✔ Sélectionnée</button>' : '<button onclick="espAdd(\'' + c.id + '\')">➕ Sélectionner</button>') + '</div>';
+          });
+          h += '</div>';
+        });
+      }
+    }
+    h += '</div></main>';
+    a.innerHTML = h;
+  }
+  function addEspBtn(){
+    var nav = document.querySelector('#home .hside nav');
+    if (!nav || nav.querySelector('#besp')) return;
+    var b = document.createElement('button');
+    b.id = 'besp'; b.className = 'hb'; b.textContent = '🧑‍🏫 Espace professeur';
+    b.onclick = function(){ espFor = null; espCur = null; espClassId = null; go('espprof'); };
+    var alt = nav.querySelector('button.hb.alt');
+    if (alt && alt.nextSibling) nav.insertBefore(b, alt.nextSibling); else if (alt) nav.appendChild(b); else nav.appendChild(b);
+  }
+  function addEspHeaderBtn(){
+    var ref = document.getElementById('baeh');
+    if (!ref || document.getElementById('besph')) return;
+    var b = document.createElement('button');
+    b.id = 'besph'; b.className = 's'; b.textContent = '🧑‍🏫 Espaces prof';
+    b.onclick = function(){ espIsMaster = true; espCur = null; espFor = null; espClassId = null; go('espprof'); };
+    ref.parentNode.insertBefore(b, ref);
+  }
+  var prevEspRender = window.render;
+  window.render = function(){
+    if (view.page === 'espprof') { renderEsp(); return; }
+    var r = prevEspRender.apply(this, arguments);
+    try {
+      if (!(typeof me !== 'undefined' && me)) addEspBtn();
+      else if (espIsMasterUser()) addEspHeaderBtn();
     } catch (e) {}
     return r;
   };
