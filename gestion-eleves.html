@@ -2027,7 +2027,7 @@ function paperFrD(t){ return new Date(t + 'T12:00:00').toLocaleDateString('fr-FR
 </script>
 <script>
 /* Les AE : un compte « Les AE » sur l'accueil, avec un sous-compte par matière.
-   Chaque AE garde sa liste de professeurs (saisie ou import Nom, Prénoms, Matière, Téléphone, Observation).
+   Chaque AE garde sa liste de professeurs (saisie ou import N° d’ordre, Matricule, Nom, Prénoms, Discipline, ID-ANPE, Contact).
    MasterLog peut ajouter, renommer, fixer un code d'accès ou supprimer un AE. */
 (function(){
   var DEF = [
@@ -2087,8 +2087,8 @@ function paperFrD(t){ return new Date(t + 'T12:00:00').toLocaleDateString('fr-FR
       return;
     }
     var rows = (t.profs || []).map(function(p){
-      return '<tr><td>' + esc(p.nom) + '</td><td>' + esc(p.prenoms) + '</td><td>' + esc(p.mat) + '</td><td>' + esc(p.tel) +
-        '</td><td>' + esc(p.obs) + '</td><td><button class="d" onclick="aeDelProf(\'' + t.id + '\',\'' + p.id + '\')">✕</button></td></tr>';
+      return '<tr><td>' + esc(p.ordre) + '</td><td>' + esc(p.matricule) + '</td><td>' + esc(p.nom) + '</td><td>' + esc(p.prenoms) + '</td><td>' + esc(p.mat) + '</td><td>' + esc(p.anpe) + '</td><td>' + esc(p.tel) +
+        '</td><td><button class="d" onclick="aeDelProf(\'' + t.id + '\',\'' + p.id + '\')">✕</button></td></tr>';
     }).join('');
     a.innerHTML = '<main>' + back +
       '<div class="card"><h2>📚 ' + esc(t.name) + '</h2>' +
@@ -2097,17 +2097,16 @@ function paperFrD(t){ return new Date(t + 'T12:00:00').toLocaleDateString('fr-FR
       '<div class="row"><button onclick="aeToggleForm()">' + (aeFormOpen ? '✖ Fermer' : '👤 Inscrire un professeur ou importer la liste') + '</button></div>' +
       (aeFormOpen ? '<div class="card" style="margin:10px 0">' +
       '<h3>Inscrire un professeur</h3>' +
-      '<div class="row"><input id="aeN" placeholder="Nom" style="width:140px;height:38px;padding:4px 8px;font-size:16px"><input id="aeP" placeholder="Prénoms" style="width:140px;height:38px;padding:4px 8px;font-size:16px">' +
-      '<input id="aeM" value="' + esc(t.mat) + '" placeholder="Matière" style="width:125px;height:38px;padding:4px 8px;font-size:16px"><input id="aeT" placeholder="Téléphone" style="width:125px;height:38px;padding:4px 8px;font-size:16px">' +
-      '<input id="aeO" placeholder="Observation" style="width:150px;height:38px;padding:4px 8px;font-size:16px"></div>' +
+      '<div class="row"><input id="aeOr" placeholder="N° d’ordre" style="width:110px;height:38px;padding:4px 8px;font-size:16px"><input id="aeMa" placeholder="Matricule" style="width:120px;height:38px;padding:4px 8px;font-size:16px"><input id="aeN" placeholder="Nom" style="width:140px;height:38px;padding:4px 8px;font-size:16px"><input id="aeP" placeholder="Prénoms" style="width:140px;height:38px;padding:4px 8px;font-size:16px">' +
+      '<input id="aeM" value="' + esc(t.mat) + '" placeholder="Discipline" style="width:125px;height:38px;padding:4px 8px;font-size:16px"><input id="aeAn" placeholder="ID-ANPE" style="width:120px;height:38px;padding:4px 8px;font-size:16px"><input id="aeT" placeholder="Contact" style="width:125px;height:38px;padding:4px 8px;font-size:16px"></div>' +
       '<div class="row"><button onclick="aeAddProf(\'' + t.id + '\')">+ Ajouter</button></div>' +
       '<h3>Importer la liste des professeurs</h3>' +
-      '<p class="mu">Fichier Excel, CSV ou Word avec l\'entête : Nom, Prénoms, Matière, Téléphone, Observation.</p>' +
-      '<div class="row"><label class="btn s" style="border:1px solid var(--bd);color:var(--pr);background:none">📥 Importer Excel / Word<input type="file" hidden accept=".xlsx,.xls,.csv,.docx" onchange="aeImport(\'' + t.id + '\',this.files[0])"></label>' +
+      '<p class="mu">Fichier Excel, CSV ou Word avec l\'entête : N° d’ordre, Matricule, Nom, Prénoms, Discipline, ID-ANPE, Contact. Les cases vides sont acceptées.</p>' +
+      '<div class="row"><button type="button" onclick="document.getElementById(\'aeF_' + t.id + '\').click()">📥 Importer un fichier Excel ou Word</button><input id="aeF_' + t.id + '" type="file" accept=".xlsx,.xls,.csv,.doc,.docx,application/vnd.openxmlformats-officedocument.spreadsheetml.sheet,application/vnd.openxmlformats-officedocument.wordprocessingml.document,application/msword,application/vnd.ms-excel,text/csv" style="position:absolute;width:1px;height:1px;opacity:0" onchange="aeImport(\'' + t.id + '\',this.files[0]);this.value=\'\'">' +
       '<button class="s" onclick="aeTpl()">📄 Modèle Excel</button> <button class="s" onclick="aeTplWord()">📄 Modèle Word</button></div></div>' : '') +
       '<h3>Liste des professeurs (' + (t.profs || []).length + ')</h3>' +
-      '<div class="wrap"><table><tr><th>Nom</th><th>Prénoms</th><th>Matière</th><th>Téléphone</th><th>Observation</th><th></th></tr>' +
-      (rows || '<tr><td colspan="6" class="mu">Aucun professeur pour le moment.</td></tr>') + '</table></div>' + aeSearchHtml(t) + presenceHtml(t) + vuHtml(t) + rapHtml(t) +
+      '<div class="wrap"><table><tr><th>N° d’ordre</th><th>Matricule</th><th>Nom</th><th>Prénoms</th><th>Discipline</th><th>ID-ANPE</th><th>Contact</th><th></th></tr>' +
+      (rows || '<tr><td colspan="8" class="mu">Aucun professeur pour le moment.</td></tr>') + '</table></div>' + aeSearchHtml(t) + presenceHtml(t) + vuHtml(t) + rapHtml(t) +
       '</div></main>';
   }
 
@@ -2471,11 +2470,11 @@ function paperFrD(t){ return new Date(t + 'T12:00:00').toLocaleDateString('fr-FR
   };
   window.aeAddProf = function(id){
     var t = aeOne(id); if (!t) return;
-    var nom = ($('aeN').value || '').trim().replace(/\s+/g, ' ');
-    if (!nom) return alert('Le nom est obligatoire.');
+    var nom = ($('aeN').value || '').trim().replace(/\s+/g, ' '), prenoms = ($('aeP').value || '').trim();
+    if (!nom && !prenoms) return alert('Le nom ou les prénoms sont obligatoires.');
     t.profs = t.profs || [];
-    t.profs.push({ id: uid(), nom: nom, prenoms: ($('aeP').value || '').trim(), mat: ($('aeM').value || '').trim() || t.mat,
-                   tel: ($('aeT').value || '').trim(), obs: ($('aeO').value || '').trim() });
+    t.profs.push({ id: uid(), ordre: ($('aeOr').value || '').trim(), matricule: ($('aeMa').value || '').trim(), nom: nom, prenoms: prenoms,
+                   mat: ($('aeM').value || '').trim() || t.mat, anpe: ($('aeAn').value || '').trim(), tel: ($('aeT').value || '').trim() });
     commit();
   };
   window.aeDelProf = function(aid, pid){
@@ -2487,8 +2486,11 @@ function paperFrD(t){ return new Date(t + 'T12:00:00').toLocaleDateString('fr-FR
     var k = aeNorm(String(s || '')).replace(/[^a-z]/g, '');
     if (k.indexOf('nom') === 0 && k.indexOf('prenom') < 0) return 'nom';
     if (k.indexOf('prenom') === 0) return 'prenoms';
-    if (k.indexOf('mati') === 0) return 'mat';
-    if (k.indexOf('tel') === 0 || k.indexOf('phone') === 0) return 'tel';
+    if (k.indexOf('mati') === 0 || k.indexOf('discip') === 0) return 'mat';
+    if (k.indexOf('matric') === 0) return 'matricule';
+    if (k.indexOf('ordre') >= 0) return 'ordre';
+    if (k.indexOf('anpe') >= 0) return 'anpe';
+    if (k.indexOf('tel') === 0 || k.indexOf('phone') === 0 || k.indexOf('contact') === 0) return 'tel';
     if (k.indexOf('observ') === 0) return 'obs';
     return '';
   }
@@ -2505,7 +2507,14 @@ function paperFrD(t){ return new Date(t + 'T12:00:00').toLocaleDateString('fr-FR
     var rows = [], name = (f.name || '').toLowerCase();
     try {
       var buf = await readBuf(f);
-      if (/\.docx$/.test(name)) {
+      if (/\.doc$/.test(name)) {
+        /* Modèle Word exporté par l'application (.doc = HTML avec tableau) */
+        var hd = new TextDecoder('utf-8').decode(buf);
+        var dd = new DOMParser().parseFromString(hd, 'text/html');
+        dd.querySelectorAll('tr').forEach(function(tr){
+          rows.push(Array.from(tr.children).map(function(td){ return td.textContent.trim(); }));
+        });
+      } else if (/\.docx$/.test(name)) {
         if (!window.mammoth) throw new Error('module Word non chargé (vérifie ta connexion internet)');
         var h = (await mammoth.convertToHtml({ arrayBuffer: buf })).value;
         var d = new DOMParser().parseFromString(h, 'text/html');
@@ -2536,10 +2545,10 @@ function paperFrD(t){ return new Date(t + 'T12:00:00').toLocaleDateString('fr-FR
     rows.forEach(function(r){
       var o = {};
       map.forEach(function(k, i){ if (k) o[k] = String(r[i] === undefined ? '' : r[i]).trim().replace(/\s+/g, ' '); });
-      if (!o.nom) { bad++; return; }
-      var key = aeNorm(o.nom + '|' + (o.prenoms || '') + '|' + (o.mat || ''));
+      if (!o.nom && !o.prenoms) { bad++; return; }
+      var key = aeNorm((o.nom || '') + '|' + (o.prenoms || '') + '|' + (o.mat || ''));
       if (t.profs.some(function(p){ return aeNorm(p.nom + '|' + (p.prenoms || '') + '|' + (p.mat || '')) === key; })) { skip++; return; }
-      t.profs.push({ id: uid(), nom: o.nom, prenoms: o.prenoms || '', mat: o.mat || t.mat, tel: o.tel || '', obs: o.obs || '' });
+      t.profs.push({ id: uid(), ordre: o.ordre || '', matricule: o.matricule || '', nom: o.nom || '', prenoms: o.prenoms || '', mat: o.mat || t.mat, anpe: o.anpe || '', tel: o.tel || '' });
       add++;
     });
     commit();
@@ -2547,14 +2556,14 @@ function paperFrD(t){ return new Date(t + 'T12:00:00').toLocaleDateString('fr-FR
   };
   window.aeTpl = function(){
     if (!window.XLSX) return alert('Module Excel non chargé. Vérifie ta connexion internet.');
-    var ws = XLSX.utils.aoa_to_sheet([['Nom', 'Prénoms', 'Matière', 'Téléphone', 'Observation'], ['Awa', 'Diallo', 'Français', '0190000000', '']]);
+    var ws = XLSX.utils.aoa_to_sheet([['N° d’ordre', 'Matricule', 'Nom', 'Prénoms', 'Discipline', 'ID-ANPE', 'Contact'], ['1', 'MAT001', 'Awa', 'Diallo', 'Français', 'ANPE001', '0190000000']]);
     var wb = XLSX.utils.book_new();
     XLSX.utils.book_append_sheet(wb, ws, 'Professeurs');
     XLSX.writeFile(wb, 'modele-import-professeurs-AE.xlsx');
   };
   window.aeTplWord = function(){
-    var rows = '<tr><td>Nom</td><td>Prénoms</td><td>Matière</td><td>Téléphone</td><td>Observation</td></tr>' +
-               '<tr><td>Awa</td><td>Diallo</td><td>Français</td><td>0190000000</td><td></td></tr>';
+    var rows = '<tr><td>N° d’ordre</td><td>Matricule</td><td>Nom</td><td>Prénoms</td><td>Discipline</td><td>ID-ANPE</td><td>Contact</td></tr>' +
+               '<tr><td>1</td><td>MAT001</td><td>Awa</td><td>Diallo</td><td>Français</td><td>ANPE001</td><td>0190000000</td></tr>';
     var html = '<html xmlns:o="urn:schemas-microsoft-com:office:word" xmlns="http://www.w3.org/TR/REC-html40"><head><meta charset="utf-8"></head><body>' +
                '<table border="1" cellspacing="0" cellpadding="4">' + rows + '</table></body></html>';
     var blob = new Blob(['\ufeff' + html], { type: 'application/msword' });
