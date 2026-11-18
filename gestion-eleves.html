@@ -2759,6 +2759,7 @@ function paperFrD(t){ return new Date(t + 'T12:00:00').toLocaleDateString('fr-FR
   var espCur = null;   /* professeur connecté */
   var espClassId = null; /* classe ouverte (tableau des notes) */
   var espPromOpen = false; /* liste PROM-CLASS ouverte ou fermée */
+  var espMesOpen = false; /* liste « Mes classes » ouverte ou fermée */
   var espQuery = '';     /* saisie de recherche, conservée si la page se redessine */
   var espIsMaster = false; /* MasterLog : ouverture d'un espace professeur sans mot de passe */
   var espSemChoice = 1;  /* 1 = 1er semestre, 2 = 2ème semestre, 3 = bilan annuel */
@@ -2901,7 +2902,7 @@ function paperFrD(t){ return new Date(t + 'T12:00:00').toLocaleDateString('fr-FR
     espLastSet(espFor.key);
     espCur = espFor; espFor = null; render();
   };
-  window.espLogout = function(){ espCur = null; espFor = null; espClassId = null; espIsMaster = false; espPromOpen = false; espAbsOpen = false; render(); };
+  window.espLogout = function(){ espCur = null; espFor = null; espClassId = null; espIsMaster = false; espPromOpen = false; espAbsOpen = false; espMesOpen = false; render(); };
   function espLastGet(){ try { return localStorage.getItem('gestion_esp_last') || ''; } catch (e) { return ''; } }
   function espLastSet(k){ try { if (k) localStorage.setItem('gestion_esp_last', k); else localStorage.removeItem('gestion_esp_last'); } catch (e) {} }
   function espIsMasterUser(){ return typeof me !== 'undefined' && !!me && me.role === 'master'; }
@@ -2987,33 +2988,48 @@ function paperFrD(t){ return new Date(t + 'T12:00:00').toLocaleDateString('fr-FR
   };
   window.espReset = function(){ espLastSet(''); espCur = null; espFor = null; espClassId = null; render(); };
   /* ----- Cocher Absents : le professeur coche les absents de ses classes, avec les mêmes boutons que le SG ----- */
-  var espAbsOpen = false, espAbsDay = '', espAbsQ = '';
+  var espAbsOpen = false, espAbsDay = '', espAbsQ = '', espAbsCls = null;
   function espIsoOf(d){ return d.getFullYear() + '-' + String(d.getMonth() + 1).padStart(2, '0') + '-' + String(d.getDate()).padStart(2, '0'); }
   function espAbsCurDay(){ return espAbsDay || todayIso(); }
-  /* Élèves des seules classes sélectionnées par le professeur, filtrés par la recherche */
+  /* Liste des classes sélectionnées du professeur : chaque classe est un bouton */
+  function espAbsClassesHtml(){
+    var cls = espSelOf(espCur.key).map(espClassById).filter(Boolean);
+    if (!cls.length) return '<p class="mu">Aucune classe sélectionnée. Touche PROM-CLASS pour choisir tes classes.</p>';
+    return '<p class="mu" style="margin:4px 0">Choisis une classe :</p>' + cls.map(function(c){
+      return '<div class="row"><button onclick="espAbsPick(\'' + c.id + '\')">📘 ' + esc(c.name || '?') + ' · ' + esc(c.annee || '') + '</button></div>';
+    }).join('');
+  }
+  /* Élèves : avec une recherche, on cherche dans toutes les classes du professeur ; sinon, dans la classe choisie */
   function espAbsStudents(){
-    var ids = espSelOf(espCur.key).slice();
     var q = espNrm(espAbsQ);
+    var ids = q ? espSelOf(espCur.key) : (espAbsCls ? [espAbsCls] : []);
+    if (!ids.length) return [];
     return (db.students || []).filter(function(s){
       return ids.indexOf(s.cid) >= 0 && (!q || espNrm(s.name).indexOf(q) >= 0);
     }).sort(function(a, b){
       var ca = espClassById(a.cid), cb = espClassById(b.cid);
-      return String(ca ? ca.name : '').localeCompare(String(cb ? cb.name : ''), 'fr') || String(a.name).localeCompare(String(b.name), 'fr');
+      return String(ca ? ca.name : '').localeCompare(String(cb ? cb.name : ''), 'fr') || String(a.name || '').localeCompare(String(b.name || ''), 'fr');
     });
   }
   function espAbsListHtml(){
+    var q = espNrm(espAbsQ), h = '';
+    if (!q) {
+      if (!espAbsCls) return espAbsClassesHtml();
+      var c = espClassById(espAbsCls);
+      if (!c || espSelOf(espCur.key).indexOf(espAbsCls) < 0) { espAbsCls = null; return espAbsClassesHtml(); }
+      h = '<div class="row"><button class="s" onclick="espAbsBack()">← Mes classes</button></div>' +
+        '<p style="margin:6px 0 4px"><b>' + esc(c.name || '?') + '</b> <span class="mu">· ' + esc(c.annee || '') + '</span></p>';
+    } else {
+      h = '<p class="mu" style="margin:4px 0">Résultats dans tes classes :</p>';
+    }
     var day = espAbsCurDay(), D = (db.abs || {})[day] || {};
     var list = espAbsStudents();
-    if (!list.length) return '<p class="mu">Aucun élève trouvé dans tes classes.</p>';
-    var h = '', last = null;
+    if (!list.length) return h + '<p class="mu">Aucun élève trouvé.</p>';
     list.forEach(function(s){
-      if (s.cid !== last) {
-        last = s.cid;
-        var c = espClassById(s.cid) || {};
-        h += '<p style="margin:10px 0 4px"><b>' + esc(c.name || '?') + '</b> <span class="mu">· ' + esc(c.annee || '') + '</span></p>';
-      }
       var r = D[s.id] || {}, id = "'" + s.id + "'";
-      h += '<div class="cls" style="cursor:default;display:flex;justify-content:space-between;align-items:center;gap:8px;flex-wrap:wrap"><span>' + esc(s.name) + '</span>' +
+      var cl = espClassById(s.cid) || {};
+      var label = q ? esc(s.name) + ' <span class="mu">· ' + esc(cl.name || '?') + '</span>' : esc(s.name);
+      h += '<div class="cls" style="cursor:default;display:flex;justify-content:space-between;align-items:center;gap:8px;flex-wrap:wrap"><span>' + label + '</span>' +
         '<span><button class="ab am ' + (r.m ? 'on' : '') + '" onclick="espAbsToggle(' + id + ',\'m\')">AbM</button> ' +
         '<button class="ab as ' + (r.s ? 'on' : '') + '" onclick="espAbsToggle(' + id + ',\'s\')">AbS</button> ' +
         '<button class="ab mld ' + (r.ml ? 'on' : '') + '" onclick="espAbsToggle(' + id + ',\'ml\')">Mld</button> ' +
@@ -3030,7 +3046,9 @@ function paperFrD(t){ return new Date(t + 'T12:00:00').toLocaleDateString('fr-FR
       '<div class="row"><input id="espAbsQ" value="' + esc(espAbsQ) + '" placeholder="Rechercher un élève" autocomplete="off" oninput="espAbsSearch(this.value)" style="width:100%;height:40px"></div>' +
       '<div id="espAbsRes">' + espAbsListHtml() + '</div></div>';
   }
-  window.espAbsToggleOpen = function(){ espAbsOpen = !espAbsOpen; render(); };
+  window.espAbsToggleOpen = function(){ espAbsOpen = !espAbsOpen; espAbsCls = null; espAbsQ = ''; render(); };
+  window.espAbsPick = function(id){ espAbsCls = id; espAbsQ = ''; render(); };
+  window.espAbsBack = function(){ espAbsCls = null; espAbsQ = ''; render(); };
   window.espAbsSetDay = function(v){ if (!v) return; espAbsDay = v; render(); };
   window.espAbsShift = function(n){ var d = new Date(espAbsCurDay() + 'T12:00:00'); d.setDate(d.getDate() + n); espAbsDay = espIsoOf(d); render(); };
   window.espAbsSearch = function(v){ espAbsQ = String(v || ''); var box = document.getElementById('espAbsRes'); if (box) box.innerHTML = espAbsListHtml(); };
@@ -3049,6 +3067,7 @@ function paperFrD(t){ return new Date(t + 'T12:00:00').toLocaleDateString('fr-FR
     try { save(); } catch (e) {}
     render();
   };
+  window.espMesToggle = function(){ espMesOpen = !espMesOpen; render(); };
   /* PROM-CLASS : ouverture / fermeture de la liste des promotions et classes */
   window.espPromToggle = function(){ espPromOpen = !espPromOpen; render(); };
   /* Une classe sélectionnée par un professeur n'est plus sélectionnable par les autres */
@@ -3491,13 +3510,16 @@ function paperFrD(t){ return new Date(t + 'T12:00:00').toLocaleDateString('fr-FR
           h += '<div class="card" style="margin:8px 0;border-color:#d97706"><b>⚠️ ' + esc(espNameByKey(rq.from)) + ' demande que tu libères la classe ' + esc(c.name || '?') + '.</b>' +
             '<div class="row"><button onclick="espRelease(\'' + cid + '\')">✔ Libérer la classe</button></div></div>';
         });
-        h += '<h3>Mes classes</h3>';
         var mine = sel.map(function(id){ return espClassById(id); }).filter(Boolean);
-        if (!mine.length) h += '<p class="mu">Aucune classe sélectionnée. Touche PROM-CLASS pour choisir tes classes.</p>';
-        mine.forEach(function(c){
-          h += '<div class="cls"><button onclick="espOpenClass(\'' + c.id + '\')">📘 ' + esc(c.name || '?') + ' · ' + esc(c.annee || '') + ' · ' + esc(pn(c.owner, c.promo || 'A')) + '</button> ' +
-            '<button class="d" onclick="espRemove(\'' + c.id + '\')">✕ Supprimer</button></div>';
-        });
+        h += '<div class="row"><button onclick="espMesToggle()">' + (espMesOpen ? '✖ Fermer Mes classes' : '📚 Mes classes (' + mine.length + ')') + '</button></div>';
+        if (espMesOpen) {
+          if (!mine.length) h += '<p class="mu">Aucune classe sélectionnée. Touche PROM-CLASS pour choisir tes classes.</p>';
+          mine.forEach(function(c){
+            h += '<div class="cls" style="display:flex;align-items:center;gap:8px;flex-wrap:nowrap">' +
+              '<button style="flex:1;min-width:0;text-align:left" onclick="espOpenClass(\'' + c.id + '\')">📘 ' + esc(c.name || '?') + ' · ' + esc(c.annee || '') + ' · ' + esc(pn(c.owner, c.promo || 'A')) + '</button>' +
+              '<button class="d" title="Supprimer de ma liste" onclick="espRemove(\'' + c.id + '\')">🗑</button></div>';
+          });
+        }
         if (!espViewOnly()) h += espAbsHtml();
         if (!espViewOnly()) h += '<div class="row"><button onclick="espPromToggle()">' + (espPromOpen ? '✖ Fermer PROM-CLASS' : '🏫 PROM-CLASS') + '</button></div>';
         var groups = espPromOpen ? espGroups() : [];
