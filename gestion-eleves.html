@@ -2042,9 +2042,8 @@ function paperFrD(t){ return new Date(t + 'T12:00:00').toLocaleDateString('fr-FR
 (function(){
   var DEF = [
     ['AE Français','Français'],['AE Anglais','Anglais'],['AE Hist-Géo','Hist-Géo'],['AE Philo','Philosophie'],
-    ['AE Espagnol','Espagnol'],['AE Allemand','Allemand'],['AE Maths','Maths'],['AE PCT','PCT'],
-    ['AE SVT','SVT'],['AE Économie','Économie'],['AE EPS','EPS'],['AE Informatique','Informatique'],
-    ['AE Fongbé','Fongbé'],['AE Amideste','Amideste']
+    ['AE Espagnol','Espagnol'],['AE Allemand','Allemand'],['AE Maths','Maths'],['AE SVT','SVT'],
+    ['AE PCT','PCT'],['AE Économie','Économie'],['AE EPS','EPS'],['AE Informatique','Informatique']
   ];
   var unlocked = {};
   function isMaster(){ return typeof me !== 'undefined' && !!me && me.role === 'master'; }
@@ -2065,6 +2064,7 @@ function paperFrD(t){ return new Date(t + 'T12:00:00').toLocaleDateString('fr-FR
   /* ----- pages ----- */
   function renderAE(){
     var a = $('app'); if (!a) return;
+    if (view.target === 'pp') return renderPP(a);
     var t = view.target ? aeOne(view.target) : null;
     if (t) return renderOne(a, t);
     var rows = aes().map(function(x){
@@ -2078,8 +2078,856 @@ function paperFrD(t){ return new Date(t + 'T12:00:00').toLocaleDateString('fr-FR
     }).join('');
     a.innerHTML = '<main><div class="row"><button class="s" onclick="aeBack()">← Retour</button></div>' +
       ((me && me.role === 'surv') || isStaffAE() ? allProfsHtml(isStaffAE()) : '') + '<div class="card"><h2>📚 Les AE</h2><p class="mu">AE = Animateur d’établissement. Choisis l’AE de la matière pour gérer ses professeurs.</p>' +
+      '<div class="row" style="margin:0 0 12px"><button onclick="ppListOn=false;go(\'ae\',{target:\'pp\'})">👨‍🏫 Professeur principal (PP)</button></div>' +
+      (isMaster() ? ppAccessAdminHtml() : '') +
       rows + (isMaster() ? '<div class="row" style="margin-top:12px"><button onclick="aeAdd()">+ Ajouter un AE</button></div>' : '') +
       '</div></main>';
+  }
+  /* ----- PP : toutes les classes de l'application, de la 6e à la Terminale ----- */
+  var PP_LEVELS = ['6e', '5e', '4e', '3e', '2nde', '1ère', 'Tle'];
+  var PP_DIGIT = { '6': '6e', '5': '5e', '4': '4e', '3': '3e', '2': '2nde', '1': '1ère' };
+  var PP_WORD = { sixieme: '6e', cinquieme: '5e', quatrieme: '4e', troisieme: '3e', seconde: '2nde', premiere: '1ère', terminale: 'Tle', tle: 'Tle', term: 'Tle' };
+  /* Niveau d'après le nom : « 6e A », « 5eme B », « 2nde C », « 1ère D », « Tle D », « Terminale A »… */
+  function ppLevelOf(txt){
+    var s = aeNorm(txt);
+    if (!s) return '';
+    var m = s.match(/^(\d)/);
+    if (m && PP_DIGIT[m[1]]) return PP_DIGIT[m[1]];
+    m = s.match(/^(sixieme|cinquieme|quatrieme|troisieme|seconde|premiere|terminale|tle|term)/);
+    if (m) return PP_WORD[m[1]];
+    var found = '';
+    s.split(/[^a-z0-9]+/).forEach(function(w){
+      if (found) return;
+      var d = w.match(/^(\d)(e|eme|ieme|ere|re|nde|nd|de)$/);
+      if (d && PP_DIGIT[d[1]]) found = PP_DIGIT[d[1]];
+      else if (PP_WORD[w]) found = PP_WORD[w];
+    });
+    return found;
+  }
+  var ppCid = null, ppSem = 1, ppListOn = false;
+  window.ppOpen = function(id){ ppCid = id; ppSem = 1; ppBulletinOn = false; render(); };
+  window.ppBack = function(){ ppCid = null; ppBulletinOn = false; render(); };
+  window.ppSemSet = function(n){ ppSem = n; render(); };
+  /* Colonnes « matière » d'une classe : une par matière des professeurs qui l'ont sélectionnée (PROM-CLASS) */
+  /* Matières du tableau PP : toutes les AE, dans l'ordre des AE (sans attendre le choix de la classe par les professeurs) */
+  function ppColumns(cid){
+    var out = [], seen = {}, tch = espClassTeachers(cid);
+    var cls = (db.classes || []).find(function(x){ return x.id === cid; });
+    /* Élève de 1er cycle (6e à 3e) : le français est présenté en Communication Écrite et Lecture */
+    var cy1 = !!cls && ['6e', '5e', '4e', '3e'].indexOf(ppLevelOf(cls.name)) >= 0;
+    aes().forEach(function(x){
+      var label = String(x.mat || String(x.name || '').replace(/^AE\s*/i, '') || '—');
+      var isFr = espIsFrench({ mat: x.mat || x.name || '' });
+      var before = out.length;
+      var here = tch.filter(function(t){
+        return (x.profs || []).some(function(p){ return espIsCollege(p) && espKey(p.nom, p.prenoms) === t.key; });
+      });
+      if (isFr && cy1) {
+        if (!here.length) ESP_SUBJ1.forEach(function(s){ out.push({ name: s.name, key: null, ae: x.id }); });
+        here.forEach(function(t){
+          ESP_SUBJ1.forEach(function(s){ var k = t.key + s.suffix; if (!seen[k]) { seen[k] = true; out.push({ name: s.name, key: k, ae: x.id }); } });
+        });
+      } else {
+        here.forEach(function(t){
+          var k2 = t.key;
+          if (!seen[k2]) { seen[k2] = true; out.push({ name: isFr ? 'Français' : label, key: k2, ae: x.id }); }
+        });
+      }
+      /* Toute AE garde sa matière dans le tableau, même sans professeur */
+      if (out.length === before) out.push({ name: isFr ? 'Français' : label, key: null, ae: x.id });
+    });
+    return out;
+  }
+  /* Moyenne coefficiée d'un élève dans une matière : 1 = 1er sem., 2 = 2ème sem., 3 = annuelle */
+  function ppExemptOf(cid, sid, aeId){ var e = db.ppExempt; return !!(e && e[cid] && e[cid][sid] && e[cid][sid][aeId]); }
+  function ppAvg(col, cid, sid, sem){
+    if (col.ae && ppExemptOf(cid, sid, col.ae)) return null;
+    var N = db.espNotes && db.espNotes[col.key] && db.espNotes[col.key][cid];
+    if (!N) return null;
+    var m1 = espCalc((N.rows || {})[sid] || {}, N.coef).mc, m2 = espCalc((N.rows2 || {})[sid] || {}, N.coef).mc;
+    if (sem === 1) return m1; if (sem === 2) return m2;
+    return (m1 !== null && m2 !== null) ? (m1 + 2 * m2) / 3 : null;
+  }
+  function ppCondOf(cid, sid, sem){
+    var c = db.ppCond && db.ppCond[cid] && db.ppCond[cid][sid];
+    if (!c) return null;
+    var a = c[1] === '' || c[1] === undefined ? null : Number(c[1]), b = c[2] === '' || c[2] === undefined ? null : Number(c[2]);
+    if (sem === 1) return a; if (sem === 2) return b;
+    return (a !== null && b !== null) ? (a + 2 * b) / 3 : null;
+  }
+  window.ppSetCond = function(cid, sid, sem, el){
+    var v = String(el.value || '').replace(',', '.').trim(), n = v === '' ? '' : Number(v);
+    if (v !== '' && (isNaN(n) || n < 0 || n > 20)) { alert('La note de conduite doit être comprise entre 0 et 20.'); el.value = ''; n = ''; }
+    if (!db.ppCond) db.ppCond = {};
+    if (!db.ppCond[cid]) db.ppCond[cid] = {};
+    if (!db.ppCond[cid][sid]) db.ppCond[cid][sid] = {};
+    db.ppCond[cid][sid][sem] = n;
+    commit();
+  };
+  /* Moyennes du semestre (total des points / coefficient total) pour chaque élève */
+  function ppMoyOf(c, studs, cols, coefTotal, sem){
+    var out = {};
+    studs.forEach(function(st){
+      var sumM = 0, hasM = false;
+      cols.forEach(function(k){ var a = ppAvg(k, c.id, st.id, sem); if (a !== null) { sumM += a; hasM = true; } });
+      var cdv = ppCondOf(c.id, st.id, sem);
+      var tot = (hasM || cdv !== null) ? sumM + (cdv === null ? 0 : cdv) : null;
+      var ct = ppCoefTotal(c, cols, sem, st.id);
+      out[st.id] = { tot: tot, coef: ct, moy: tot === null ? null : tot / ct };
+    });
+    return out;
+  }
+  /* ----- Données, statistiques et exports d'un tableau PP (1er sem., 2ème sem., bilan annuel) ----- */
+  var PP_APPR = ['Médiocre', 'Très faible', 'Faible', 'Insuffisant', 'Passable', 'Assez bien', 'Bien', 'Très bien', 'Excellent'];
+  /* Coefficient total du semestre : une matière sans note saisie par son professeur ne compte pas (ni son coefficient) ; conduite = coef 1 */
+  /* Coefficient total d'un élève pour un semestre : une matière sans note saisie par son professeur, ou dont l'élève est dispensé, ne compte pas ; conduite = coef 1 */
+  function ppCoefTotal(c, cols, sem, sid){
+    var studs = espStudents(c.id);
+    return cols.reduce(function(sum, k){
+      if (!k.key) return sum;
+      if (sid && k.ae && ppExemptOf(c.id, sid, k.ae)) return sum;
+      var filled = studs.some(function(st){ return ppAvg(k, c.id, st.id, sem) !== null; });
+      if (!filled) return sum;
+      var N = db.espNotes && db.espNotes[k.key] && db.espNotes[k.key][c.id]; var x = N ? espNum(N.coef) : null;
+      return sum + (x === null ? 1 : x);
+    }, 0) + 1;
+  }
+  function ppCoefTxt(v){ return String(Math.round(v * 100) / 100).replace('.', ','); }
+  function ppCellTxt(k, cid, sid, sem){
+    if (k.ae && ppExemptOf(cid, sid, k.ae)) return 'Dispensé';
+    return espFmt(ppAvg(k, cid, sid, sem));
+  }
+  function ppTableData(c, sem){
+    var studs = espStudents(c.id), cols = ppColumns(c.id), coefTotal = ppCoefTotal(c, cols, sem === 3 ? 1 : sem);
+    var vals = {}, head, rows, label = { 1: '1er Semestre', 2: '2ème Semestre', 3: 'Bilan annuel' }[sem];
+    if (sem === 3) {
+      var m1 = ppMoyOf(c, studs, cols, ppCoefTotal(c, cols, 1), 1), m2 = ppMoyOf(c, studs, cols, ppCoefTotal(c, cols, 2), 2);
+      studs.forEach(function(st){ var a = m1[st.id].moy, b = m2[st.id].moy; vals[st.id] = (a !== null && b !== null) ? (a + 2 * b) / 3 : null; });
+      var rk3 = espRankMap(studs, function(st){ return vals[st.id]; });
+      head = ['N°', 'Nom et prénoms', 'Moyenne 1er Semestre', 'Moyenne 2ème Semestre', 'Moyenne annuelle', 'Rang', 'Appréciation'];
+      rows = studs.map(function(st, i){ return [i + 1, st.name || '', espFmt(m1[st.id].moy), espFmt(m2[st.id].moy), espFmt(vals[st.id]), rk3[st.id], espAppr(vals[st.id])]; });
+    } else {
+      var mo = ppMoyOf(c, studs, cols, coefTotal, sem);
+      studs.forEach(function(st){ vals[st.id] = mo[st.id].moy; });
+      var rk = espRankMap(studs, function(st){ return vals[st.id]; });
+      var coefTxt = String(Math.round(coefTotal * 100) / 100).replace('.', ',');
+      head = ['N°', 'Nom et prénoms'].concat(cols.map(function(k){ return k.name; }), ['Conduite', 'Coef total', 'Total Points', 'Moyenne du semestre', 'Rang', 'Appréciation']);
+      rows = studs.map(function(st, i){
+        return [i + 1, st.name || ''].concat(cols.map(function(k){ return ppCellTxt(k, c.id, st.id, sem); }),
+          [espFmt(ppCondOf(c.id, st.id, sem)), ppCoefTxt(mo[st.id].coef), espFmt(mo[st.id].tot), espFmt(mo[st.id].moy), rk[st.id], espAppr(mo[st.id].moy)]);
+      });
+    }
+    return { label: label, head: head, rows: rows, studs: studs, vals: vals };
+  }
+  function ppStats(d){
+    var withV = d.studs.filter(function(st){ return d.vals[st.id] !== null && d.vals[st.id] !== undefined; });
+    var out = { total: withV.length, max: null, maxNames: [], min: null, minNames: [], n10: 0, counts: {}, none: d.studs.length - withV.length };
+    if (withV.length) {
+      out.max = Math.max.apply(null, withV.map(function(st){ return d.vals[st.id]; }));
+      out.min = Math.min.apply(null, withV.map(function(st){ return d.vals[st.id]; }));
+      out.maxNames = withV.filter(function(st){ return d.vals[st.id] === out.max; }).map(function(st){ return st.name || ''; });
+      out.minNames = withV.filter(function(st){ return d.vals[st.id] === out.min; }).map(function(st){ return st.name || ''; });
+    }
+    withV.forEach(function(st){
+      var x = d.vals[st.id];
+      if (espTrunc(x) >= 10) out.n10++;
+      var ap = espAppr(x); out.counts[ap] = (out.counts[ap] || 0) + 1;
+    });
+    return out;
+  }
+  function ppStatRows(st){
+    return [
+      ['Plus forte moyenne', st.max !== null ? espFmt(st.max) : '—', st.maxNames.join(', ') || '—'],
+      ['Plus faible moyenne', st.min !== null ? espFmt(st.min) : '—', st.minNames.join(', ') || '—'],
+      ['Élèves ayant une moyenne ≥ 10', st.n10 + ' sur ' + st.total, '—']
+    ];
+  }
+  function ppApprRows(st){
+    var pct = function(n){ return st.total ? ((n / st.total) * 100).toFixed(1).replace('.', ',') + ' %' : '—'; };
+    return PP_APPR.map(function(l){ var n = st.counts[l] || 0; return [l, String(n), pct(n)]; })
+      .concat([['Sans moyenne', String(st.none), '—']]);
+  }
+  function ppFootHtml(c, sem){
+    var d = ppTableData(c, sem), st = ppStats(d);
+    var tbl = function(head, rows){
+      return '<div class="wrap"><table><tr>' + head.map(function(h){ return '<th>' + esc(h) + '</th>'; }).join('') + '</tr>' +
+        rows.map(function(r){ return '<tr>' + r.map(function(x){ return '<td>' + esc(String(x)) + '</td>'; }).join('') + '</tr>'; }).join('') + '</table></div>';
+    };
+    var dlBtns = bulBlocked('tab') ? '' : '<div class="row" style="margin-top:12px"><button onclick="ppExport(\'xlsx\',' + sem + ')">⬇ Excel · ' + esc(d.label) + '</button> ' +
+      '<button onclick="ppExport(\'pdf\',' + sem + ')">⬇ PDF · ' + esc(d.label) + '</button></div>';
+    return dlBtns +
+      '<div class="card" style="margin-top:10px"><h3>Statistiques · ' + esc(d.label) + '</h3>' +
+      tbl(['Indicateur', 'Valeur', 'Élève(s)'], ppStatRows(st)) +
+      '<h3 style="margin-top:12px">Statistiques des appréciations</h3>' +
+      tbl(['Appréciation', 'Nombre', '%'], ppApprRows(st)) + '</div>';
+  }
+  window.ppExport = function(kind, sem){
+    if (bulBlocked('tab')) return alert('Le téléchargement des tableaux est bloqué par le MasterLog.');
+    var cls = (db.classes || []).find(function(x){ return x.id === ppCid; });
+    if (!cls) return alert('Classe introuvable.');
+    var d = ppTableData(cls, sem), st = ppStats(d);
+    var safe = (String(cls.name || 'classe') + ' - ' + d.label).replace(/[^A-Za-z0-9À-ÿ]+/g, '_').replace(/^_|_$/g, '');
+    if (kind === 'xlsx') {
+      if (typeof XLSX === 'undefined') return alert('Export Excel indisponible (bibliothèque non chargée).');
+      var aoa = [['PP · ' + cls.name + ' · ' + d.label], d.head].concat(d.rows, [[]],
+        [['Statistiques · ' + d.label], ['Indicateur', 'Valeur', 'Élève(s)']], ppStatRows(st), [[]],
+        [['Statistiques des appréciations'], ['Appréciation', 'Nombre', '%']], ppApprRows(st));
+      var wb = XLSX.utils.book_new();
+      XLSX.utils.book_append_sheet(wb, XLSX.utils.aoa_to_sheet(aoa), 'Tableau');
+      return XLSX.writeFile(wb, safe + '.xlsx');
+    }
+    var JS = window.jspdf && window.jspdf.jsPDF;
+    if (!JS) return alert('Bibliothèque PDF non chargée.');
+    var doc = new JS({ orientation: 'landscape', unit: 'mm', format: 'a4' });
+    var H = doc.internal.pageSize.getHeight();
+    doc.setFont('helvetica', 'bold'); doc.setFontSize(13); doc.setTextColor(20, 20, 20);
+    doc.text('Professeur principal · ' + cls.name + ' · ' + d.label, 10, 14);
+    doc.setFont('helvetica', 'normal'); doc.setFontSize(8); doc.setTextColor(101, 108, 134);
+    doc.text(d.studs.length + ' élève(s)', 10, 19);
+    var style = { font: 'helvetica', fontSize: 8, cellPadding: 1.6, textColor: [30, 35, 55], lineColor: [90, 110, 160], lineWidth: 0.3 };
+    var hstyle = { fillColor: [204, 224, 247], textColor: [0, 0, 0], fontStyle: 'bold', halign: 'center' };
+    doc.autoTable({ startY: 23, head: [d.head], body: d.rows.map(function(r){ return r.map(String); }), margin: { left: 10, right: 10 }, styles: style, headStyles: hstyle });
+    doc.autoTable({ startY: doc.lastAutoTable.finalY + 8, head: [['Indicateur', 'Valeur', 'Élève(s)']], body: ppStatRows(st), margin: { left: 10, right: 10 }, styles: style, headStyles: hstyle });
+    doc.autoTable({ startY: doc.lastAutoTable.finalY + 6, head: [['Appréciation', 'Nombre', '%']], body: ppApprRows(st), margin: { left: 10, right: 10 }, styles: style, headStyles: hstyle });
+    var n = doc.internal.getNumberOfPages();
+    for (var p = 1; p <= n; p++) { doc.setPage(p); doc.setFont('helvetica', 'normal'); doc.setFontSize(8); doc.setTextColor(140, 146, 170); doc.text('Page ' + p + ' / ' + n, 287, H - 6, { align: 'right' }); }
+    doc.save(safe + '.pdf');
+  };
+  /* ----- Dispenses : élève non concerné par une matière (ex. inapte en EPS) ----- */
+  function ppAeLabel(x){ return String(x.mat || String(x.name || '').replace(/^AE\s*/i, '') || '—'); }
+  window.ppExemptAdd = function(cid){
+    var sid = ($('ppExS') || {}).value, aeId = ($('ppExM') || {}).value;
+    if (!sid || !aeId) return alert('Choisis un élève et une matière.');
+    db.ppExempt = db.ppExempt || {};
+    db.ppExempt[cid] = db.ppExempt[cid] || {};
+    db.ppExempt[cid][sid] = db.ppExempt[cid][sid] || {};
+    db.ppExempt[cid][sid][aeId] = true;
+    try { save(); } catch (e) {}
+    render();
+  };
+  window.ppExemptDel = function(cid, sid, aeId){
+    if (db.ppExempt && db.ppExempt[cid] && db.ppExempt[cid][sid]) {
+      delete db.ppExempt[cid][sid][aeId];
+      if (!Object.keys(db.ppExempt[cid][sid]).length) delete db.ppExempt[cid][sid];
+    }
+    try { save(); } catch (e) {}
+    render();
+  };
+  function ppExemptHtml(c){
+    var studs = espStudents(c.id), ex = (db.ppExempt || {})[c.id] || {};
+    var nameOf = {}; studs.forEach(function(st){ nameOf[st.id] = st.name || ''; });
+    var items = [];
+    Object.keys(ex).forEach(function(sid){
+      Object.keys(ex[sid] || {}).forEach(function(aeId){
+        var x = aes().find(function(a){ return a.id === aeId; });
+        items.push('<tr><td>' + esc(nameOf[sid] || '(élève absent de la classe)') + '</td><td>' + esc(x ? ppAeLabel(x) : '(matière supprimée)') + '</td>' +
+          '<td><button class="s" onclick="ppExemptDel(\'' + c.id + '\',\'' + sid + '\',\'' + aeId + '\')">Retirer</button></td></tr>');
+      });
+    });
+    var stuOpts = studs.map(function(st){ return '<option value="' + esc(st.id) + '">' + esc(st.name || '') + '</option>'; }).join('');
+    var subOpts = aes().map(function(x){ return '<option value="' + esc(x.id) + '">' + esc(ppAeLabel(x)) + '</option>'; }).join('');
+    return '<div class="card" style="margin-top:12px"><h2>🚫 Dispenses</h2>' +
+      '<p class="mu">Élève qui ne fait pas une matière (ex. inapte en EPS) : la matière et son coefficient ne sont pas comptés dans sa moyenne.</p>' +
+      '<div class="row"><select id="ppExS"><option value="">— Élève —</option>' + stuOpts + '</select> ' +
+      '<select id="ppExM"><option value="">— Matière —</option>' + subOpts + '</select> ' +
+      '<button onclick="ppExemptAdd(\'' + c.id + '\')">Ajouter la dispense</button></div>' +
+      (items.length ? '<div class="wrap" style="margin-top:10px"><table><tr><th>Élève</th><th>Matière</th><th></th></tr>' + items.join('') + '</table></div>' : '<p class="mu">Aucune dispense pour cette classe.</p>') +
+      '</div>';
+  }
+  /* ----- BULLETINS : un bulletin par élève pour le 1er semestre et pour le 2ème semestre (le 2ème affiche aussi l'annuel) ----- */
+  /* Timbre des bulletins : en haut à gauche l'en-tête officiel, en haut à droite l'établissement et l'année scolaire */
+  var BUL_ETAB = 'CEG1 ALLADA', BUL_ANNEE = 'Année Scolaire 2026-2027';
+  var BUL_TIMBRE_A = ['MINISTÈRE DES ENSEIGNEMENTS SECONDAIRE,', 'TECHNIQUE ET DE LA FORMATION PROFESSIONNELLE'];
+  var BUL_TIMBRE_B = ['RÉPUBLIQUE DU BÉNIN', 'DIRECTION DÉPARTEMENTALE DES ENSEIGNEMENTS', 'SECONDAIRE, TECHNIQUE ET DE LA FORMATION', 'PROFESSIONNELLE DE L\'ATLANTIQUE', 'COLLÈGE D\'ENSEIGNEMENT GÉNÉRAL 1', 'ALLADA'];
+  function ppTimbreHtml(){
+    return '<div class="bul-timbre"><div class="bt-left">' + BUL_TIMBRE_A.map(esc).join('<br>') +
+      '<div class="bt-flag"><i></i><i></i><i></i></div>' +
+      '<b>' + esc(BUL_TIMBRE_B[0]) + '</b><br>' + BUL_TIMBRE_B.slice(1).map(esc).join('<br>') + '</div>' +
+      '<div class="bt-right"><strong>' + esc(BUL_ETAB) + '</strong><span>' + esc(BUL_ANNEE) + '</span></div></div>';
+  }
+  /* Matières affichées sur le bulletin selon le niveau : 6e et 5e sans Espagnol, Allemand, Philosophie, Économie ; 4e et 3e sans Philosophie, Économie */
+  function ppBulCols(c){
+    var cols = ppColumns(c.id), lv = ppLevelOf(c.name), hide = [];
+    if (lv === '6e' || lv === '5e') hide = ['espagnol', 'allemand', 'philo', 'economie'];
+    else if (lv === '4e' || lv === '3e') hide = ['philo', 'economie'];
+    if (!hide.length) return cols;
+    return cols.filter(function(k){
+      var nm = aeNorm(k.name);
+      return !hide.some(function(h){ return nm.indexOf(h) >= 0; });
+    });
+  }
+  /* Cycle de la classe, affiché sur chaque bulletin */
+  function ppCycleTxt(c){
+    var lv = ppLevelOf(c.name);
+    if (['6e', '5e', '4e', '3e'].indexOf(lv) >= 0) return '1er cycle';
+    if (['2nde', '1ère', 'Tle'].indexOf(lv) >= 0) return '2nd cycle';
+    return 'cycle non défini';
+  }
+  /* Informations élève et effectif affichés sur les bulletins */
+  function ppSexTxt(st){ return st.sex === 'M' ? 'Masculin' : 'Féminin'; }
+  function ppDobTxt(st){ var d = st.dob; return (d && /^\d{4}-\d{2}-\d{2}$/.test(d)) ? d.split('-').reverse().join('/') : '—'; }
+  function ppSexCount(studs){ var g = studs.filter(function(x){ return x.sex === 'M'; }).length; return 'Garçons : ' + g + ' · Filles : ' + (studs.length - g); }
+  /* Plus forte et plus faible moyenne de la classe (sans les noms) */
+  function ppExtremes(studs, mo){
+    var v = studs.map(function(st){ return mo[st.id].moy; }).filter(function(x){ return x !== null && x !== undefined; });
+    if (!v.length) return { max: null, min: null };
+    return { max: Math.max.apply(null, v), min: Math.min.apply(null, v) };
+  }
+  var ppBulletinOn = false, ppBulletinSem = 1, ppBulletinAll = false;
+  window.ppBulletinOpen = function(){ ppBulletinSem = ppSem === 2 ? 2 : 1; ppBulletinOn = true; render(); };
+  window.ppBulletinClose = function(){ ppBulletinOn = false; ppBulletinAll = false; render(); };
+  window.ppBulletinAllToggle = function(){ ppBulletinAll = !ppBulletinAll; render(); };
+  window.ppBulletinSemSet = function(n){ ppBulletinSem = n; render(); };
+  function ppBulletinHtml(c){
+    var studs = espStudents(c.id), cols = ppBulCols(c), sem = ppBulletinSem === 2 ? 2 : 1, n = studs.length;
+    var label = sem === 1 ? '1er Semestre' : '2ème Semestre';
+    var m1 = ppMoyOf(c, studs, cols, null, 1), m2 = ppMoyOf(c, studs, cols, null, 2), mo = sem === 1 ? m1 : m2;
+    var annual = {};
+    studs.forEach(function(st){ var a = m1[st.id].moy, b = m2[st.id].moy; annual[st.id] = (a !== null && b !== null) ? (a + 2 * b) / 3 : null; });
+    var rk1 = espRankMap(studs, function(st){ return m1[st.id].moy; });
+    var rk2 = espRankMap(studs, function(st){ return m2[st.id].moy; });
+    var rkA = espRankMap(studs, function(st){ return annual[st.id]; });
+    var rk = sem === 1 ? rk1 : rk2;
+    var ext1 = ppExtremes(studs, m1), ext2 = ppExtremes(studs, m2);
+    var style = '<style>' +
+      '.bul-wrap{font-family:Georgia,"Times New Roman",serif;color:#1d2433}' +
+      '.bul{background:#fff;border:2px solid #1f3a68;border-radius:10px;padding:0;margin:0 auto 22px;max-width:820px;overflow:hidden;box-shadow:0 2px 10px rgba(0,0,0,.08)}' +
+      '.bul-timbre{display:flex;justify-content:space-between;align-items:flex-start;gap:12px;padding:10px 18px 8px;background:#fff}' +
+      '.bt-left{flex:0 1 52%;text-align:center;font-family:Arial,Helvetica,sans-serif;font-size:10px;line-height:1.35;color:#1d2433;text-transform:uppercase}' +
+      '.bt-flag{display:flex;justify-content:center;gap:0;margin:3px 0}.bt-flag i{display:block;width:26px;height:4px}.bt-flag i:nth-child(1){background:#008751}.bt-flag i:nth-child(2){background:#fcd116}.bt-flag i:nth-child(3){background:#e8112d}' +
+      '.bt-right{text-align:right;color:#1f3a68}.bt-right strong{display:block;font-size:24px;letter-spacing:1px;line-height:1.1}.bt-right span{display:block;font-size:16px;font-weight:bold;margin-top:6px;color:#1d2433}' +
+      '.bul-head{background:linear-gradient(90deg,#1f3a68,#2f5d9e);color:#fff;padding:14px 18px;text-align:center}' +
+      '.bul-head h3{margin:0;font-size:20px;letter-spacing:1px}.bul-head div{font-size:13px;opacity:.92;margin-top:4px}' +
+      '.bul-info{display:flex;flex-wrap:wrap;gap:8px 24px;padding:12px 18px;background:#f3f6fb;border-bottom:1px solid #d5ddea;font-size:14px}' +
+      '.bul-info b{color:#1f3a68}' +
+      '.bul table{width:calc(100% - 36px);margin:14px 18px;border-collapse:collapse;font-size:13.5px}' +
+      '.bul th{background:#dfe8f5;color:#1f3a68;border:1px solid #9aa4bf;padding:6px 8px;text-align:center}' +
+      '.bul td{border:1px solid #9aa4bf;padding:5px 8px;text-align:center}' +
+      '.bul td.l{text-align:left}' +
+      '.bul tr.alt td{background:#f6f8fc}' +
+      '.bul-sum{display:flex;flex-wrap:wrap;gap:10px;padding:0 18px 14px}' +
+      '.bul-sum div{flex:1 1 150px;border:1px solid #9aa4bf;border-radius:8px;padding:8px 10px;background:#fbfcfe}' +
+      '.bul-sum small{display:block;color:#5a6a86;font-size:12px}.bul-sum b{font-size:17px;color:#1f3a68}' +
+      '.bul-app{padding:0 18px 12px;font-size:14px}' +
+      '.bul-pass{margin:0 18px 14px;padding:10px;border:2px solid #2e7d32;border-radius:8px;background:#e8f5e9;color:#1b5e20;font-weight:bold;text-align:center;font-size:16px;letter-spacing:.5px}' +
+      '.bul-rep{margin:0 18px 14px;padding:10px;border:2px solid #c62828;border-radius:8px;background:#ffebee;color:#b71c1c;font-weight:bold;text-align:center;font-size:16px;letter-spacing:.5px}' +
+      '.bul-sign{display:flex;justify-content:space-between;padding:6px 18px 18px;font-size:13px;color:#33405a}' +
+      '@media print{header,nav,.no-print{display:none!important}body{background:#fff!important}.bul{box-shadow:none;margin:0;page-break-after:always;max-width:none;border-radius:0}.bul:last-child{page-break-after:auto}}' +
+      '</style>';
+    var secOf = function(st, i, sem){
+      var label = sem === 1 ? '1er Semestre' : '2ème Semestre';
+      var mo = sem === 1 ? m1 : m2;
+      var rowsHtml = '';
+      cols.forEach(function(k, j){
+        var cls = j % 2 ? ' class="alt"' : '';
+        var dispense = !!(k.ae && ppExemptOf(c.id, st.id, k.ae));
+        var v = ppAvg(k, c.id, st.id, sem);
+        var N = db.espNotes && db.espNotes[k.key] && db.espNotes[k.key][c.id];
+        var coef = N && espNum(N.coef) !== null ? espNum(N.coef) : 1;
+        var counted = !dispense && !!k.key && v !== null;
+        rowsHtml += '<tr' + cls + '><td class="l">' + esc(k.name) + '</td><td>' + (counted ? ppCoefTxt(coef) : '—') + '</td><td><b>' + (dispense ? '<i>Dispensé</i>' : espFmt(v)) + '</b></td><td>' + (dispense ? '—' : espAppr(v)) + '</td></tr>';
+      });
+      var cd = ppCondOf(c.id, st.id, sem);
+      rowsHtml += '<tr class="alt"><td class="l">Conduite</td><td>' + ppCoefTxt(1) + '</td><td><b>' + espFmt(cd) + '</b></td><td>' + espAppr(cd) + '</td></tr>';
+      var summary, extra = '';
+      if (sem === 1) {
+        summary = '<div><small>Total des points</small><b>' + espFmt(mo[st.id].tot) + '</b></div>' +
+          '<div><small>Coefficient total</small><b>' + ppCoefTxt(mo[st.id].coef) + '</b></div>' +
+          '<div><small>Moyenne du 1er semestre</small><b>' + espFmt(mo[st.id].moy) + '</b></div>' +
+          '<div><small>Rang</small><b>' + rk1[st.id] + ' / ' + n + '</b></div>' +
+          '<div><small>Appréciation</small><b>' + esc(espAppr(mo[st.id].moy)) + '</b></div>' +
+          '<div><small>Plus forte moyenne de la classe</small><b>' + espFmt(ext1.max) + '</b></div>' +
+          '<div><small>Plus faible moyenne de la classe</small><b>' + espFmt(ext1.min) + '</b></div>';
+      } else {
+        summary = '<div><small>Moyenne du 1er semestre</small><b>' + espFmt(m1[st.id].moy) + '</b></div>' +
+          '<div><small>Rang du 1er semestre</small><b>' + rk1[st.id] + ' / ' + n + '</b></div>' +
+          '<div><small>Moyenne du 2ème semestre</small><b>' + espFmt(m2[st.id].moy) + '</b></div>' +
+          '<div><small>Rang du 2ème semestre</small><b>' + rk2[st.id] + ' / ' + n + '</b></div>' +
+          '<div><small>Moyenne annuelle</small><b>' + espFmt(annual[st.id]) + '</b></div>' +
+          '<div><small>Rang annuel</small><b>' + rkA[st.id] + ' / ' + n + '</b></div>' +
+          '<div><small>Plus forte moyenne de la classe (2ème sem.)</small><b>' + espFmt(ext2.max) + '</b></div>' +
+          '<div><small>Plus faible moyenne de la classe (2ème sem.)</small><b>' + espFmt(ext2.min) + '</b></div>';
+        extra = '<div class="bul-app"><b>Appréciation de la moyenne annuelle :</b> ' + esc(espAppr(annual[st.id])) + '</div>' +
+          (annual[st.id] === null ? '' : espTrunc(annual[st.id]) >= 10
+            ? '<div class="bul-pass">PASSE EN CLASSE SUPÉRIEURE</div>'
+            : '<div class="bul-rep">DOIT REPRENDRE LA CLASSE</div>');
+      }
+      return '<section class="bul" data-nm="' + esc(espNrm(st.name || '')) + '">' + ppTimbreHtml() +
+        '<div class="bul-head"><h3>BULLETIN DE NOTES</h3><div>' + esc(label) + ' · ' + esc(ppCycleTxt(c)) + ' · Professeur principal</div></div>' +
+        '<div class="bul-info"><span><b>Élève :</b> ' + esc(st.name || '') + '</span><span><b>Sexe :</b> ' + ppSexTxt(st) + '</span><span><b>Né(e) le :</b> ' + ppDobTxt(st) + '</span><span><b>Tél. parent :</b> ' + esc(st.phone || 'non renseigné') + '</span><span><b>N° d’ordre :</b> ' + (i + 1) + '</span></div>' +
+        '<div class="bul-info"><span><b>Classe :</b> ' + esc(c.name || '') + '</span><span><b>Cycle :</b> ' + esc(ppCycleTxt(c)) + '</span><span><b>Effectif :</b> ' + n + ' élève(s)</span><span>' + ppSexCount(studs) + '</span></div>' +
+        '<table><tr><th>Matière</th><th>Coef</th><th>Moyenne</th><th>Appréciation</th></tr>' + rowsHtml + '</table>' +
+        '<div class="bul-sum">' + summary + '</div>' + extra +
+        '<div class="bul-sign"><span>Le professeur principal</span><span>Le chef d’établissement</span></div>' +
+        (bulBlocked('indiv') ? '' : '<div class="no-print" style="text-align:center;padding:0 18px 16px"><button onclick="ppBulletinOne(' + i + ')">⬇ PDF de cet élève (1er et 2ème semestre)</button></div>') +
+        '</section>';
+    };
+    var sections = '';
+    if (ppBulletinAll) studs.forEach(function(st, i){ sections += secOf(st, i, 1) + secOf(st, i, 2); });
+    else sections = studs.map(function(st, i){ return secOf(st, i, sem); }).join('');
+    if (!n) sections = '<p class="mu">Aucun élève dans cette classe.</p>';
+    var sw = function(v, t){ return '<button class="' + (sem === v ? 'hb' : 's') + '" onclick="ppBulletinSemSet(' + v + ')">' + t + '</button> '; };
+    return '<main><div class="row no-print"><button class="s" onclick="ppBulletinClose()">← Retour à la classe</button> ' +
+      '<input type="search" placeholder="Rechercher un élève" oninput="ppBulSearch(this.value)" style="height:36px;min-width:200px"> ' + sw(1, 'Bulletin 1er Semestre') + sw(2, 'Bulletin 2ème Semestre') + (bulBlocked('bloc') ? '' : '<button onclick="ppBulletinPdf()">⬇ PDF (tous les bulletins)</button> ') + '<button class="s" onclick="ppBulletinAllToggle()">👁 ' + (ppBulletinAll ? 'Un seul semestre' : 'Voir tous les bulletins') + '</button> <button class="s" onclick="window.print()">🖨 Imprimer</button></div>' +
+      style + '<div class="bul-wrap">' + sections + '</div></main>';
+  }
+  /* Recherche d'un élève dans les bulletins affichés (sans recharger la page) */
+  window.ppBulSearch = function(v){
+    var q = espNrm(String(v || ''));
+    document.querySelectorAll('.bul-wrap section.bul').forEach(function(s){
+      var nm = s.getAttribute('data-nm') || '';
+      s.style.display = (!q || nm.indexOf(q) >= 0) ? '' : 'none';
+    });
+  };
+  /* PDF du bulletin d'un seul élève : 1er semestre puis 2ème semestre */
+  window.ppBulletinOne = function(i){
+    if (bulBlocked('indiv')) return alert('Le téléchargement individuel est bloqué par le MasterLog.');
+    var c = (db.classes || []).find(function(x){ return x.id === ppCid; });
+    if (!c) return alert('Classe introuvable.');
+    var JS = window.jspdf && window.jspdf.jsPDF;
+    if (!JS) return alert('Bibliothèque PDF non chargée.');
+    var d = ppBulData(c);
+    var st = d.studs[i];
+    if (!st) return alert('Élève introuvable.');
+    var doc = new JS({ orientation: 'portrait', unit: 'mm', format: 'a4' });
+    ppBulPage(doc, d, st, i, 1);
+    doc.addPage();
+    ppBulPage(doc, d, st, i, 2);
+    var eleve = String(st.name || 'eleve').replace(/[^A-Za-z0-9À-ÿ]+/g, '_').replace(/^_|_$/g, '');
+    var classe = String(c.name || 'classe').replace(/[^A-Za-z0-9À-ÿ]+/g, '_').replace(/^_|_$/g, '');
+    doc.save('Bulletin_' + eleve + '_' + classe + '.pdf');
+  };
+  /* ----- Bulletins en PDF : pour chaque élève, une page 1er semestre puis une page 2ème semestre ----- */
+  function ppBulData(c){
+    var studs = espStudents(c.id), cols = ppBulCols(c), n = studs.length;
+    var m1 = ppMoyOf(c, studs, cols, null, 1), m2 = ppMoyOf(c, studs, cols, null, 2);
+    var annual = {}, rk1 = {}, rk2 = {}, rkA = {};
+    studs.forEach(function(st){ var a = m1[st.id].moy, b = m2[st.id].moy; annual[st.id] = (a !== null && b !== null) ? (a + 2 * b) / 3 : null; });
+    rk1 = espRankMap(studs, function(st){ return m1[st.id].moy; });
+    rk2 = espRankMap(studs, function(st){ return m2[st.id].moy; });
+    rkA = espRankMap(studs, function(st){ return annual[st.id]; });
+    return { c: c, studs: studs, cols: cols, n: n, m1: m1, m2: m2, annual: annual, rk1: rk1, rk2: rk2, rkA: rkA };
+  }
+  function ppBulRows(d, st, sem){
+    var c = d.c, rows = [];
+    d.cols.forEach(function(k){
+      var dispense = !!(k.ae && ppExemptOf(c.id, st.id, k.ae));
+      var v = ppAvg(k, c.id, st.id, sem);
+      var N = db.espNotes && db.espNotes[k.key] && db.espNotes[k.key][c.id];
+      var coef = N && espNum(N.coef) !== null ? espNum(N.coef) : 1;
+      var counted = !dispense && !!k.key && v !== null;
+      rows.push([k.name, counted ? ppCoefTxt(coef) : '—', dispense ? 'Dispensé' : espFmt(v), dispense ? '—' : espAppr(v)]);
+    });
+    var cd = ppCondOf(c.id, st.id, sem);
+    rows.push(['Conduite', ppCoefTxt(1), espFmt(cd), espAppr(cd)]);
+    return rows;
+  }
+  function ppBulBox(doc, x, y, w, h, label, value){
+    doc.setDrawColor(154, 164, 191); doc.setFillColor(251, 252, 254);
+    doc.roundedRect(x, y, w, h, 2, 2, 'FD');
+    doc.setFont('helvetica', 'normal'); doc.setFontSize(8); doc.setTextColor(90, 106, 134);
+    doc.text(String(label), x + 3, y + 5);
+    doc.setFont('helvetica', 'bold'); doc.setFontSize(12); doc.setTextColor(31, 58, 104);
+    doc.text(String(value), x + 3, y + 12.5);
+  }
+  function ppBulPage(doc, d, st, i, sem){
+    var W = doc.internal.pageSize.getWidth(), M = 12, bw = (W - 2 * M - 6) / 3;
+    var label = sem === 1 ? '1er Semestre' : '2ème Semestre';
+    var T = 22; /* hauteur du timbre placé au-dessus de la bande bleue */
+    /* Timbre à gauche */
+    var cx = M + 45, ty = [7.5, 10, 15, 17.5, 20, 22.5, 25, 27.5];
+    doc.setTextColor(29, 36, 51); doc.setFontSize(5.8);
+    doc.setFont('helvetica', 'normal');
+    doc.text(BUL_TIMBRE_A[0], cx, ty[0], { align: 'center' });
+    doc.text(BUL_TIMBRE_A[1], cx, ty[1], { align: 'center' });
+    doc.setFillColor(0, 135, 81); doc.rect(cx - 12, 11.2, 8, 1, 'F');
+    doc.setFillColor(252, 209, 22); doc.rect(cx - 4, 11.2, 8, 1, 'F');
+    doc.setFillColor(232, 17, 45); doc.rect(cx + 4, 11.2, 8, 1, 'F');
+    doc.setFont('helvetica', 'bold'); doc.text(BUL_TIMBRE_B[0], cx, ty[2], { align: 'center' });
+    doc.setFont('helvetica', 'normal');
+    for (var q = 1; q < BUL_TIMBRE_B.length; q++) doc.text(BUL_TIMBRE_B[q], cx, ty[2 + q], { align: 'center' });
+    /* Établissement et année scolaire à droite */
+    doc.setFont('helvetica', 'bold'); doc.setFontSize(18); doc.setTextColor(31, 58, 104);
+    doc.text(BUL_ETAB, W - M, 15, { align: 'right' });
+    doc.setFontSize(11.5); doc.setTextColor(29, 36, 51);
+    doc.text(BUL_ANNEE, W - M, 22, { align: 'right' });
+    doc.setFillColor(31, 58, 104); doc.rect(M, 10 + T, W - 2 * M, 20, 'F');
+    doc.setFont('helvetica', 'bold'); doc.setFontSize(17); doc.setTextColor(255, 255, 255);
+    doc.text('BULLETIN DE NOTES', W / 2, 20 + T, { align: 'center' });
+    doc.setFont('helvetica', 'normal'); doc.setFontSize(10);
+    doc.text(label + ' · ' + ppCycleTxt(d.c) + ' · Professeur principal', W / 2, 26 + T, { align: 'center' });
+    doc.setFillColor(243, 246, 251); doc.rect(M, 33 + T, W - 2 * M, 27, 'F');
+    doc.setFont('helvetica', 'normal'); doc.setFontSize(10); doc.setTextColor(29, 36, 51);
+    doc.text('Élève : ' + (st.name || ''), M + 3, 40 + T);
+    doc.text('N° d’ordre : ' + (i + 1), W - M - 3, 40 + T, { align: 'right' });
+    doc.text('Sexe : ' + ppSexTxt(st) + '     Né(e) le : ' + ppDobTxt(st) + '     Tél. parent : ' + (st.phone || 'non renseigné'), M + 3, 47 + T);
+    doc.text('Classe : ' + (d.c.name || '') + '     Cycle : ' + ppCycleTxt(d.c) + '     Effectif : ' + d.n + ' élève(s) (' + ppSexCount(d.studs) + ')', M + 3, 54 + T);
+    doc.autoTable({
+      startY: 64 + T, head: [['Matière', 'Coef', 'Moyenne', 'Appréciation']], body: ppBulRows(d, st, sem),
+      margin: { left: M, right: M }, styles: { font: 'helvetica', fontSize: d.cols.length > 12 ? 7.5 : 9, cellPadding: d.cols.length > 12 ? 1 : 1.8, textColor: [30, 35, 55], lineColor: [154, 164, 191], lineWidth: 0.2 },
+      headStyles: { fillColor: [223, 232, 245], textColor: [31, 58, 104], fontStyle: 'bold', halign: 'center' },
+      columnStyles: { 0: { halign: 'left' }, 1: { halign: 'center' }, 2: { halign: 'center' }, 3: { halign: 'center' } }
+    });
+    var y = doc.lastAutoTable.finalY + 8, x0 = M, row = 0;
+    if (sem === 1) {
+      var mo = d.m1[st.id];
+      var items = [['Total des points', espFmt(mo.tot)], ['Coefficient total', ppCoefTxt(mo.coef)], ['Moyenne du 1er semestre', espFmt(mo.moy)], ['Rang', d.rk1[st.id] + ' / ' + d.n], ['Appréciation', espAppr(mo.moy)], ['Plus forte moyenne de la classe', espFmt(ppExtremes(d.studs, d.m1).max)], ['Plus faible moyenne de la classe', espFmt(ppExtremes(d.studs, d.m1).min)]];
+      items.forEach(function(it, k){
+        var col = k % 3, r = Math.floor(k / 3);
+        ppBulBox(doc, x0 + col * (bw + 3), y + r * 16, bw, 14, it[0], it[1]);
+      });
+      y += 2 * 16;
+    } else {
+      var items2 = [['Moyenne du 1er semestre', espFmt(d.m1[st.id].moy)], ['Rang du 1er semestre', d.rk1[st.id] + ' / ' + d.n], ['Moyenne du 2ème semestre', espFmt(d.m2[st.id].moy)], ['Rang du 2ème semestre', d.rk2[st.id] + ' / ' + d.n], ['Moyenne annuelle', espFmt(d.annual[st.id])], ['Rang annuel', d.rkA[st.id] + ' / ' + d.n], ['Plus forte moyenne de la classe (2ème sem.)', espFmt(ppExtremes(d.studs, d.m2).max)], ['Plus faible moyenne de la classe (2ème sem.)', espFmt(ppExtremes(d.studs, d.m2).min)]];
+      items2.forEach(function(it, k){
+        var col = k % 3, r = Math.floor(k / 3);
+        ppBulBox(doc, x0 + col * (bw + 3), y + r * 16, bw, 14, it[0], it[1]);
+      });
+      y += 3 * 16 + 4;
+      doc.setFont('helvetica', 'bold'); doc.setFontSize(10); doc.setTextColor(29, 36, 51);
+      doc.text('Appréciation de la moyenne annuelle : ' + espAppr(d.annual[st.id]), M, y + 4);
+      y += 10;
+      var av = d.annual[st.id];
+      if (av !== null) {
+        var pass = espTrunc(av) >= 10;
+        if (pass) doc.setFillColor(232, 245, 233); else doc.setFillColor(255, 235, 238);
+        doc.setDrawColor(pass ? 46 : 198, pass ? 125 : 40, pass ? 50 : 40);
+        doc.roundedRect(M, y, W - 2 * M, 12, 2, 2, 'FD');
+        doc.setFont('helvetica', 'bold'); doc.setFontSize(13);
+        if (pass) doc.setTextColor(27, 94, 32); else doc.setTextColor(183, 28, 28);
+        doc.text(pass ? 'PASSE EN CLASSE SUPÉRIEURE' : 'DOIT REPRENDRE LA CLASSE', W / 2, y + 8, { align: 'center' });
+      }
+    }
+    var sy = doc.internal.pageSize.getHeight() - 18;
+    doc.setFont('helvetica', 'normal'); doc.setFontSize(9); doc.setTextColor(51, 64, 90);
+    doc.text('Le professeur principal', M + 10, sy);
+    doc.text('Le chef d’établissement', W - M - 10, sy, { align: 'right' });
+  }
+  window.ppBulletinPdf = function(){
+    if (bulBlocked('bloc')) return alert('Le téléchargement par bloc est bloqué par le MasterLog.');
+    var c = (db.classes || []).find(function(x){ return x.id === ppCid; });
+    if (!c) return alert('Classe introuvable.');
+    var JS = window.jspdf && window.jspdf.jsPDF;
+    if (!JS) return alert('Bibliothèque PDF non chargée.');
+    var d = ppBulData(c);
+    if (!d.n) return alert('Aucun élève dans cette classe.');
+    var doc = new JS({ orientation: 'portrait', unit: 'mm', format: 'a4' });
+    var first = true;
+    d.studs.forEach(function(st, i){
+      [1, 2].forEach(function(sem){
+        if (!first) doc.addPage(); first = false;
+        ppBulPage(doc, d, st, i, sem);
+      });
+    });
+    var safe = String(c.name || 'classe').replace(/[^A-Za-z0-9À-ÿ]+/g, '_').replace(/^_|_$/g, '');
+    doc.save('Bulletins_' + safe + '.pdf');
+  };
+  function ppClassHtml(c){
+    var back = '<div class="row"><button class="s" onclick="ppBack()">← Classes du PP</button></div>';
+    var studs = espStudents(c.id), cols = ppColumns(c.id), sem = ppSem;
+    var coefTotal = ppCoefTotal(c, cols, sem);
+    var coefTxt = String(Math.round(coefTotal * 100) / 100).replace('.', ',');
+    var tab = function(n, label){ var g = n === 3 ? ' style="background:#2e7d32;color:#fff;border-color:#2e7d32"' : ''; return '<button class="' + (sem === n ? 'hb' : 's') + '"' + g + ' onclick="ppSemSet(' + n + ')">' + label + '</button> '; };
+    var tabs = '<div class="row">' + tab(1, '1er Semestre') + tab(2, '2ème Semestre') + tab(3, 'Bilan annuel') + ' <button class="s" onclick="ppBulletinOpen()">📄 BULLETIN</button></div>';
+    var label = { 1: '1er semestre', 2: '2ème semestre', 3: 'Bilan annuel' }[sem];
+    var thS = sem === 2 ? ' style="background:#ff9800;color:#fff"' : sem === 3 ? ' style="background:#2e7d32;color:#fff"' : '';
+    var th = function(txt){ return '<th' + thS + '>' + txt + '</th>'; };
+    var body, head, colCount, note;
+
+    if (sem === 3) {
+      var m1 = ppMoyOf(c, studs, cols, ppCoefTotal(c, cols, 1), 1), m2 = ppMoyOf(c, studs, cols, ppCoefTotal(c, cols, 2), 2);
+      var an = {};
+      studs.forEach(function(st){ var a = m1[st.id].moy, b = m2[st.id].moy; an[st.id] = (a !== null && b !== null) ? (a + 2 * b) / 3 : null; });
+      var rkAn = espRankMap(studs, function(st){ return an[st.id]; });
+      head = '<tr>' + th('N°') + th('Nom et prénoms') + th('Moyenne 1er Semestre') + th('Moyenne 2ème Semestre') + th('Moyenne annuelle') + th('Rang') + th('Appréciation') + '</tr>';
+      body = studs.map(function(st, i){
+        return '<tr' + (i % 2 ? ' class="pp-alt"' : '') + '><td>' + (i + 1) + '</td><td>' + esc(st.name || '') + '</td><td>' + espFmt(m1[st.id].moy) + '</td><td>' + espFmt(m2[st.id].moy) + '</td><td><b>' + espFmt(an[st.id]) + '</b></td><td>' + rkAn[st.id] + '</td><td>' + espAppr(an[st.id]) + '</td></tr>';
+      }).join('');
+      colCount = 7;
+      note = 'Moyenne annuelle = (moyenne du 1er semestre + 2 × moyenne du 2ème semestre) / 3. Moyennes du semestre = total des points / coefficient total.';
+    } else {
+      var moyOf = ppMoyOf(c, studs, cols, coefTotal, sem);
+      var rkSem = espRankMap(studs, function(st){ return moyOf[st.id].moy; });
+      head = '<tr>' + th('N°') + th('Nom et prénoms') + cols.map(function(k){ var N = db.espNotes && db.espNotes[k.key] && db.espNotes[k.key][c.id]; return th(esc(k.name) + (N && N.coef ? ' <small>(coef ' + esc(String(N.coef)) + ')</small>' : '')); }).join('') + th('Conduite') + th('Coef total') + th('Total Points') + th('Moyenne du semestre') + th('Rang') + th('Appréciation') + '</tr>';
+      body = studs.map(function(st, i){
+        var tds = cols.map(function(k){ return '<td>' + ppCellTxt(k, c.id, st.id, sem) + '</td>'; }).join('');
+        var raw = db.ppCond && db.ppCond[c.id] && db.ppCond[c.id][st.id] ? db.ppCond[c.id][st.id][sem] : '';
+        if (raw === undefined || raw === null) raw = '';
+        var cell = '<input type="text" inputmode="decimal" style="width:64px" value="' + esc(String(raw)) + '" onchange="ppSetCond(\'' + c.id + '\',\'' + st.id + '\',' + sem + ',this)">';
+        var mo = moyOf[st.id];
+        return '<tr' + (i % 2 ? ' class="pp-alt"' : '') + '><td>' + (i + 1) + '</td><td>' + esc(st.name || '') + '</td>' + tds + '<td>' + cell + '</td><td><b>' + ppCoefTxt(mo.coef) + '</b></td><td>' + espFmt(mo.tot) + '</td><td><b>' + espFmt(mo.moy) + '</b></td><td>' + rkSem[st.id] + '</td><td>' + espAppr(mo.moy) + '</td></tr>';
+      }).join('');
+      colCount = cols.length + 8;
+      note = 'Moyennes coefficiées venant des tableaux de notes des professeurs. La conduite se saisit ici (0 à 20). Moyenne du semestre = total des points / coefficient total.';
+    }
+    if (!studs.length) body = '<tr><td colspan="' + colCount + '" class="mu">Aucun élève dans cette classe.</td></tr>';
+    var style = '<style>.pp-tbl th,.pp-tbl td{border:1px solid #9aa4bf;border-collapse:collapse}.pp-tbl tr.pp-alt td{background:#eef3fb}</style>' + (sem === 2 ? '<style>.pp-s2 td{background:#fff3e0}.pp-s2 tr.pp-alt td{background:#ffe0b2}</style>' : sem === 3 ? '<style>.pp-s3 td{background:#e8f5e9}.pp-s3 tr.pp-alt td{background:#c8e6c9}</style>' : '');
+    return '<main>' + back + '<div class="card"><h2>👨‍🏫 PP · ' + esc(c.name || '') + '</h2>' + tabs +
+      '<p class="mu">' + label + ' · ' + studs.length + ' élève(s) · ' + cols.length + ' matière(s)</p>' +
+      (cols.length ? '' : '<p class="mu">Aucun professeur n’a encore sélectionné cette classe (Espace professeur › PROM-CLASS) : les colonnes de matières apparaîtront ensuite.</p>') +
+      style + '<div class="wrap' + (sem === 2 ? ' pp-s2' : sem === 3 ? ' pp-s3' : '') + '"><table class="pp-tbl">' + head + body + '</table></div>' +
+      '<p class="mu">' + note + '</p>' + ppFootHtml(c, sem) + ppExemptHtml(c) + '</div></main>';
+  }
+  /* ----- Liste des PP (ajout un à un ou import Excel / Word / CSV) ----- */
+  function ppList(){ if (!db.ppList) db.ppList = []; return db.ppList; }
+  function ppUid(){ return 'pp' + Date.now().toString(36) + Math.random().toString(36).slice(2, 7); }
+  function ppNorm(t){ return String(t || '').toLowerCase().normalize('NFD').replace(/[\u0300-\u036f]/g, '').replace(/\s+/g, ' ').trim(); }
+  function ppKeyOf(o){ return ppNorm(o.nom) + '|' + ppNorm(o.prenoms) + '|' + ppNorm(o.matricule); }
+  window.ppListOpen = function(){ ppListOn = true; ppCid = null; render(); };
+  window.ppListClose = function(){ ppListOn = false; render(); };
+  window.ppListAdd = function(){
+    var nom = ($('pplN').value || '').trim().replace(/\s+/g, ' ');
+    var prenoms = ($('pplP').value || '').trim().replace(/\s+/g, ' ');
+    if (!nom && !prenoms) return alert('Le nom ou les prénoms sont obligatoires.');
+    var o = { nom: nom, prenoms: prenoms, matricule: ($('pplM').value || '').trim(), contact: ($('pplC').value || '').trim() };
+    if (ppList().some(function(p){ return ppKeyOf(p) === ppKeyOf(o); })) return alert('Ce professeur PP existe déjà dans la liste.');
+    ppList().push(Object.assign({ id: ppUid() }, o));
+    try { save(); } catch (e) {}
+    render();
+  };
+  window.ppListDel = function(id){
+    if (!confirm('Retirer ce PP de la liste ?')) return;
+    db.ppList = ppList().filter(function(p){ return p.id !== id; });
+    try { save(); } catch (e) {}
+    render();
+  };
+  function ppReadBuf(f){
+    return new Promise(function(res, rej){
+      var r = new FileReader();
+      r.onload = function(){ res(r.result); };
+      r.onerror = function(){ rej(new Error('lecture du fichier impossible')); };
+      r.readAsArrayBuffer(f);
+    });
+  }
+  async function ppReadRows(f){
+    var name = (f.name || '').toLowerCase(), buf = await ppReadBuf(f), rows = [];
+    if (/\.docx$/.test(name)) {
+      if (!window.mammoth) throw new Error('module Word non chargé (vérifie ta connexion internet)');
+      var h = (await mammoth.convertToHtml({ arrayBuffer: buf })).value;
+      var d = new DOMParser().parseFromString(h, 'text/html');
+      d.querySelectorAll('tr').forEach(function(tr){ rows.push(Array.from(tr.children).map(function(td){ return td.textContent.trim(); })); });
+      if (!rows.length) d.querySelectorAll('p').forEach(function(p){ var line = p.textContent.trim(); if (line) rows.push(line.split(/\t|;|,/).map(function(x){ return x.trim(); })); });
+    } else if (/\.doc$/.test(name)) {
+      var dd = new DOMParser().parseFromString(new TextDecoder('utf-8').decode(buf), 'text/html');
+      dd.querySelectorAll('tr').forEach(function(tr){ rows.push(Array.from(tr.children).map(function(td){ return td.textContent.trim(); })); });
+    } else if (/\.csv$|\.txt$/.test(name)) {
+      new TextDecoder('utf-8').decode(buf).split(/\r?\n/).forEach(function(line){ if (line.trim()) rows.push(line.split(/\t|;|,/).map(function(x){ return x.trim(); })); });
+    } else {
+      if (!window.XLSX) throw new Error('module Excel non chargé (vérifie ta connexion internet)');
+      var wb = XLSX.read(new Uint8Array(buf), { type: 'array' });
+      rows = XLSX.utils.sheet_to_json(wb.Sheets[wb.SheetNames[0]], { header: 1, raw: false, defval: '' });
+    }
+    return rows.filter(function(r){ return r.some(function(x){ return String(x).trim(); }); });
+  }
+  window.ppListImport = async function(f){
+    if (!f) return;
+    var rows;
+    try { rows = await ppReadRows(f); } catch (e) { return alert('Import impossible : ' + e.message); }
+    var colOf = function(x){
+      var k = ppNorm(x).replace(/[^a-z]/g, '');
+      if (k === 'nom') return 'nom';
+      if (k.indexOf('prenom') === 0) return 'prenoms';
+      if (k.indexOf('matricule') === 0 || k === 'mat') return 'matricule';
+      if (k.indexOf('contact') === 0 || k === 'tel' || k.indexOf('telephone') === 0) return 'contact';
+      return '';
+    };
+    var map = ['nom', 'prenoms', 'matricule', 'contact'];
+    if (rows.length) {
+      var hdr = rows[0].map(colOf);
+      if (hdr.indexOf('nom') >= 0 || hdr.indexOf('prenoms') >= 0) { map = hdr; rows.shift(); }
+    }
+    var add = 0, skip = 0, bad = 0;
+    rows.forEach(function(r){
+      var o = {};
+      map.forEach(function(k, i){ if (k) o[k] = String(r[i] === undefined ? '' : r[i]).trim().replace(/\s+/g, ' '); });
+      if (!o.nom && !o.prenoms) { bad++; return; }
+      var key = ppKeyOf(o);
+      if (ppList().some(function(p){ return ppKeyOf(p) === key; })) { skip++; return; }
+      ppList().push({ id: ppUid(), nom: o.nom || '', prenoms: o.prenoms || '', matricule: o.matricule || '', contact: o.contact || '' });
+      add++;
+    });
+    try { save(); } catch (e) {}
+    render();
+    alert(add + ' PP importé(s) · ' + skip + ' doublon(s) · ' + bad + ' ligne(s) ignorée(s).');
+  };
+  function renderPPList(){
+    var list = ppList().slice().sort(function(x, y){ return String(x.nom || '').localeCompare(String(y.nom || ''), 'fr', { sensitivity: 'base' }); });
+    var rows = list.map(function(p, i){
+      return '<tr><td>' + (i + 1) + '</td><td>' + esc(p.nom || '') + '</td><td>' + esc(p.prenoms || '') + '</td><td>' + esc(p.matricule || '') + '</td><td>' + esc(p.contact || '') + '</td>' +
+        '<td><button class="s" onclick="ppListDel(\'' + p.id + '\')">Supprimer</button></td></tr>';
+    }).join('');
+    if (!list.length) rows = '<tr><td colspan="6" class="mu">Aucun PP enregistré. Ajoute-les un à un ou importe la liste.</td></tr>';
+    return '<main><div class="row"><button class="s" onclick="ppListClose()">← Les PP</button></div><div class="card">' +
+      '<h2>📋 Liste des PP <span class="mu">(' + list.length + ')</span></h2>' +
+      '<h3 style="margin:10px 0 6px">Ajouter un PP</h3>' +
+      '<div class="row"><input id="pplN" placeholder="Nom" style="width:150px"> <input id="pplP" placeholder="Prénoms" style="width:150px"> <input id="pplM" placeholder="Matricule" style="width:120px"> <input id="pplC" placeholder="Contact" style="width:120px"> <button onclick="ppListAdd()">Ajouter</button></div>' +
+      '<h3 style="margin:14px 0 6px">Importer une liste</h3>' +
+      '<div class="row"><button type="button" onclick="document.getElementById(\'pplF\').click()">📥 Importer un fichier Excel, Word ou CSV</button>' +
+      '<input id="pplF" type="file" accept=".xlsx,.xls,.csv,.doc,.docx" style="position:absolute;width:1px;height:1px;opacity:0" onchange="ppListImport(this.files[0]);this.value=\'\'"></div>' +
+      '<p class="mu">Colonnes attendues : Nom, Prénoms, Matricule, Contact (la première ligne peut contenir ces titres). Les doublons sont ignorés.</p>' +
+      '<div class="wrap"><table><tr><th>N°</th><th>Nom</th><th>Prénoms</th><th>Matricule</th><th>Contact</th><th></th></tr>' + rows + '</table></div>' +
+      '</div></main>';
+  }
+  /* ----- Accès aux données d'une classe : identifiant (issu du nom de la classe) + mot de passe créé par le PP ----- */
+  var ppUnlocked = {};
+  function ppAccs(){ if (!db.ppAcc) db.ppAcc = {}; return db.ppAcc; }
+  function ppSlug(t){
+    return String(t || '').normalize('NFD').replace(/[\u0300-\u036f]/g, '').toUpperCase().replace(/[^A-Z0-9]+/g, '-').replace(/^-+|-+$/g, '') || 'CLASSE';
+  }
+  /* Identifiant lié à la classe : son rang dans la liste des classes (CEG001 = 1re classe), sinon le premier numéro libre */
+  function ppIdFor(cls){
+    var accs = ppAccs(), used = {};
+    Object.keys(accs).forEach(function(k){ if (k !== cls.id && accs[k]) used[accs[k].id] = true; });
+    var code = function(n){ return 'CEG' + (n < 10 ? '00' : n < 100 ? '0' : '') + n; };
+    var idx = (db.classes || []).findIndex(function(x){ return x.id === cls.id; });
+    var pref = idx + 1;
+    if (pref >= 1 && pref <= 199 && !used[code(pref)]) return code(pref);
+    for (var n = 1; n <= 199; n++) { if (!used[code(n)]) return code(n); }
+    return null;
+  }
+  function ppIsMaster(){ return typeof me !== 'undefined' && !!me && me.role === 'master'; }
+  window.ppCreateAcc = function(cid){
+    var cls = (db.classes || []).find(function(x){ return x.id === cid; }); if (!cls) return;
+    var p1 = ($('ppLP1') || {}).value || '', p2 = ($('ppLP2') || {}).value || '';
+    if (p1.length < 4) return alert('Le mot de passe doit contenir au moins 4 caractères.');
+    if (p1 !== p2) return alert('Les deux mots de passe ne sont pas identiques.');
+    var id = ppIdFor(cls);
+    if (!id) return alert('Aucun identifiant disponible : CEG001 à CEG199 sont tous attribués.');
+    ppAccs()[cid] = { id: id, pass: p1 };
+    ppUnlocked[cid] = true;
+    try { save(); } catch (e) {}
+    alert('Compte créé.\nIdentifiant : ' + id + '\n\nNote-le avec ton mot de passe.');
+    render();
+  };
+  window.ppLogin = function(cid){
+    var acc = ppAccs()[cid]; if (!acc) return;
+    var idIn = (($('ppLId') || {}).value || '').trim().toUpperCase(), pw = ($('ppLPw') || {}).value || '';
+    if (idIn !== acc.id || (pw !== acc.pass && pw !== teacherPassNow())) return alert('Identifiant ou mot de passe incorrect.');
+    ppUnlocked[cid] = true;
+    render();
+  };
+  /* Mot de passe de l'espace professeur du PP, si celui-ci est connecté à son espace professeur */
+  function teacherPassNow(){
+    try { if (typeof espCur !== 'undefined' && espCur && db.espPass) return db.espPass[espCur.key] || null; } catch (e) {}
+    return null;
+  }
+  window.ppCreateWithTeacher = function(cid){
+    var cls = (db.classes || []).find(function(x){ return x.id === cid; }); if (!cls) return;
+    var pw = teacherPassNow();
+    if (!pw) return alert('Connecte-toi d’abord à ton espace professeur.');
+    var id = ppIdFor(cls);
+    if (!id) return alert('Aucun identifiant disponible : CEG001 à CEG199 sont tous attribués.');
+    ppAccs()[cid] = { id: id, pass: pw };
+    ppUnlocked[cid] = true;
+    try { save(); } catch (e) {}
+    alert('Accès créé avec ton mot de passe professeur.\nIdentifiant : ' + id);
+    render();
+  };
+  window.ppEditAcc = function(cid){
+    if (!ppIsMaster()) return alert('Seul le MasterLog peut modifier un accès.');
+    var acc = ppAccs()[cid]; if (!acc) return;
+    var id = prompt('Identifiant du MasterLog (CEG001M à CEG199M, qui se termine par M) :', acc.id); if (id === null) return;
+    id = id.trim().toUpperCase();
+    if (!/^CEG(00[1-9]|0[1-9]\d|1\d\d)M$/.test(id)) return alert('Identifiant invalide : il doit être entre CEG001M et CEG199M et se terminer par M (ex. CEG111M).');
+    var accs = ppAccs();
+    if (Object.keys(accs).some(function(k){ return k !== cid && accs[k] && accs[k].id === id; })) return alert('Cet identifiant est déjà attribué à une autre classe.');
+    var pw = prompt('Mot de passe (4 caractères minimum) :', acc.pass); if (pw === null) return;
+    if (pw.length < 4) return alert('Le mot de passe doit contenir au moins 4 caractères.');
+    accs[cid] = { id: id, pass: pw };
+    try { save(); } catch (e) {}
+    render();
+  };
+  window.ppResetAcc = function(cid){
+    if (!ppIsMaster()) return alert('Seul le MasterLog peut réinitialiser un accès.');
+    if (!confirm('Réinitialiser l’accès de cette classe ? Le PP devra créer un nouveau mot de passe.')) return;
+    delete ppAccs()[cid]; delete ppUnlocked[cid];
+    try { save(); } catch (e) {}
+    render();
+  };
+  function ppAccessOk(cls){ return !!ppUnlocked[cls.id] && !!ppAccs()[cls.id]; }
+  function ppLockHtml(cls){
+    var acc = ppAccs()[cls.id];
+    var body;
+    if (!acc) {
+      body = '<p class="mu">Crée le mot de passe de ta classe. Ton identifiant sera : <b>' + esc(ppIdFor(cls) || 'aucun disponible') + '</b></p>' +
+        '<div class="row"><input id="ppLP1" type="password" placeholder="Mot de passe (4 caractères min.)"> <input id="ppLP2" type="password" placeholder="Confirmer le mot de passe"> <button onclick="ppCreateAcc(\'' + cls.id + '\')">Créer l’accès</button></div>' +
+        (teacherPassNow() ? '<p class="mu">Tu es connecté à ton espace professeur : tu peux garder ton mot de passe professeur.</p><div class="row"><button onclick="ppCreateWithTeacher(\'' + cls.id + '\')">Utiliser mon mot de passe professeur</button></div>' : '');
+    } else {
+      body = '<p class="mu">Entre l’identifiant et le mot de passe de ta classe pour accéder aux données. Si tu es professeur et connecté à ton espace professeur, ton mot de passe professeur fonctionne aussi. L’identifiant est de la forme CEG001 à CEG199, attribué lors de la création de l’accès. Il reste valable et ne change pas si la classe est renommée.</p>' +
+        '<div class="row"><input id="ppLId" placeholder="Identifiant" style="width:160px"> <input id="ppLPw" type="password" placeholder="Mot de passe" style="width:160px"> <button onclick="ppLogin(\'' + cls.id + '\')">Ouvrir</button></div>';
+      if (ppIsMaster()) body += '<div class="row" style="margin-top:10px"><button class="s" onclick="ppResetAcc(\'' + cls.id + '\')">Réinitialiser l’accès (MasterLog)</button></div>';
+    }
+    return '<main><div class="row"><button class="s" onclick="ppBack()">← Classes du PP</button></div><div class="card"><h2>🔒 PP · ' + esc(cls.name || '') + '</h2>' + body + '</div></main>';
+  }
+  /* Accès des PP visible uniquement par le MasterLog (dans Les AE) */
+  /* ----- Blocage des téléchargements de bulletins (réglé par le MasterLog) ----- */
+  function bulBlocked(kind){ return !isMaster() && !!(db.bulBlock && db.bulBlock[kind]); }
+  window.bulBlockSet = function(kind, v){
+    if (!isMaster()) return;
+    if (!db.bulBlock) db.bulBlock = {};
+    db.bulBlock[kind] = !!v;
+    commit();
+  };
+  function bulBlockCardHtml(){
+    var b = db.bulBlock || {};
+    return '<div class="card" style="margin-top:12px"><h2>🔒 Téléchargements des PP</h2>' +
+      '<p class="mu">Réglage du MasterLog. Une case cochée empêche les PP de télécharger les bulletins.</p>' +
+      '<label style="display:flex;gap:8px;align-items:center;margin:6px 0"><input type="checkbox" ' + (b.bloc ? 'checked ' : '') + 'onchange="bulBlockSet(\'bloc\',this.checked)"> Bloquer le téléchargement de bulletin par bloc</label>' +
+      '<label style="display:flex;gap:8px;align-items:center;margin:6px 0"><input type="checkbox" ' + (b.indiv ? 'checked ' : '') + 'onchange="bulBlockSet(\'indiv\',this.checked)"> Bloquer le téléchargement de bulletin individuel</label>' +
+      '<label style="display:flex;gap:8px;align-items:center;margin:6px 0"><input type="checkbox" ' + (b.tab ? 'checked ' : '') + 'onchange="bulBlockSet(\'tab\',this.checked)"> Bloquer le téléchargement des tableaux (semestres et bilan annuel)</label></div>';
+  }
+  function ppAccessAdminHtml(){
+    var accs = ppAccs(), ids = Object.keys(accs);
+    var rows = ids.map(function(cid){
+      var cls = (db.classes || []).find(function(x){ return x.id === cid; });
+      return { cid: cid, name: cls ? (cls.name || '') : '(classe supprimée)', id: accs[cid].id || '', pass: accs[cid].pass || '' };
+    }).sort(function(a, b){ return a.name.localeCompare(b.name, 'fr', { sensitivity: 'base' }); });
+    var body = rows.length
+      ? rows.map(function(r){ return '<tr><td>' + esc(r.name) + '</td><td><b>' + esc(r.id) + '</b></td><td>' + esc(r.pass) + '</td><td><button class="s" onclick="ppEditAcc(\'' + r.cid + '\')">Modifier</button> <button class="s" onclick="ppResetAcc(\'' + r.cid + '\')">Réinitialiser</button></td></tr>'; }).join('')
+      : '<tr><td colspan="4" class="mu">Aucun accès PP créé pour le moment.</td></tr>';
+    return bulBlockCardHtml() + '<div class="card" style="margin-top:12px"><h2>🔑 Accès des PP</h2>' +
+      '<p class="mu">Identifiant et mot de passe créés par chaque PP pour sa classe.</p>' +
+      '<div class="wrap"><table><tr><th>Classe</th><th>Identifiant</th><th>Mot de passe</th><th></th></tr>' + body + '</table></div></div>';
+  }
+  function renderPP(a){
+    var back = '<div class="row"><button class="s" onclick="go(\'ae\',{target:null})">← Les AE</button></div>';
+    if (ppListOn) return a.innerHTML = renderPPList();
+    var an, cls = [], cnt = {}, sg = {};
+    try {
+      an = anneeVue();
+      (db.students || []).forEach(function(s){ cnt[s.cid] = (cnt[s.cid] || 0) + 1; });
+      (db.users || []).forEach(function(u){ sg[u.id] = u.name; });
+      cls = (db.classes || []).filter(function(c){ return c.annee === an; });
+    } catch (e) {}
+    if (ppCid) {
+      var cur = cls.find(function(c){ return c.id === ppCid; });
+      if (cur) return a.innerHTML = ppAccessOk(cur) ? (ppBulletinOn ? ppBulletinHtml(cur) : ppClassHtml(cur)) : ppLockHtml(cur);
+      ppCid = null;
+    }
+    var groups = {}, other = [], eff = 0;
+    PP_LEVELS.forEach(function(l){ groups[l] = []; });
+    cls.forEach(function(c){
+      var lv = ppLevelOf(c.name);
+      if (!lv) { try { lv = ppLevelOf(pn(c.owner, c.promo || 'A')); } catch (e) {} }
+      (groups[lv] || other).push(c);
+      eff += cnt[c.id] || 0;
+    });
+    var byName = function(x, y){ return String(x.name || '').localeCompare(String(y.name || ''), 'fr', { numeric: true }); };
+    var rowsOf = function(list){
+      return '<div class="row">' + list.slice().sort(byName).map(function(c){
+        return '<button onclick="ppOpen(\'' + c.id + '\')">' + esc(c.name) + ' <span class="mu">· ' + (cnt[c.id] || 0) + ' élève(s)</span></button>';
+      }).join(' ') + '</div>';
+    };
+    var section = function(title, list, empty){
+      return '<h3 style="margin:14px 0 6px">' + esc(title) + ' <span class="mu">(' + list.length + ' classe(s))</span></h3>' +
+        (list.length ? rowsOf(list) : '<p class="mu">' + empty + '</p>');
+    };
+    var body = PP_LEVELS.map(function(l){ return section(l, groups[l], 'Aucune classe.'); }).join('');
+    if (other.length) body += section('Autres classes', other, '');
+    var label = ''; try { label = anneeLabel(an); } catch (e) {}
+    a.innerHTML = '<main>' + back + '<div class="card"><h2>👨‍🏫 Professeur principal (PP)</h2>' +
+      '<p class="mu">Clique sur une classe pour voir ses élèves, leurs moyennes par matière et la conduite' + (label ? ' · ' + esc(label) : '') + ' : ' + cls.length + ' classe(s), ' + eff + ' élève(s).</p>' +
+      body + '</div></main>';
   }
   /* Provenance affichée : les professeurs du collège (sans ext) = CEG1 ALLADA */
   function provOf(p){ return p.ext ? (p.prov || '') : 'CEG1 ALLADA'; }
@@ -2743,13 +3591,26 @@ function paperFrD(t){ return new Date(t + 'T12:00:00').toLocaleDateString('fr-FR
       '#home .hside .mlw{margin:max(24px,calc(100dvh - 210px)) 8px 0!important;padding-top:6px!important}';
     document.head.appendChild(st);
   })();
+  /* Liste des PP : bouton dans la barre supérieure pour MasterLog, Censeur, Superviseur et chaque SG */
+  window.ppOpenList = function(){ ppListOn = true; ppCid = null; go('ae', { target: 'pp' }); };
+  function ppListBtnRole(){ return !!me && (me.role === 'master' || me.role === 'sup' || me.role === 'surv' || me.id === 'cens'); }
+  function addPPListHeaderBtn(){
+    if (!ppListBtnRole() || document.getElementById('bppl')) return;
+    var lo = Array.from(document.querySelectorAll('header button')).find(function(x){ return x.getAttribute('onclick') === 'logout()'; });
+    if (!lo) return;
+    var b = document.createElement('button');
+    b.id = 'bppl'; b.className = 's'; b.textContent = '📋 Liste des PP';
+    b.onclick = function(){ window.ppOpenList(); };
+    lo.parentNode.insertBefore(b, lo);
+  }
   var prevRender = window.render;
   window.render = function(){
-    if (view.page === 'ae') { renderAE(); return; }
+    if (view.page === 'ae') { renderAE(); try { addPPListHeaderBtn(); } catch (e) {} return; }
     var r = prevRender.apply(this, arguments);
     try {
       if (!(typeof me !== 'undefined' && me)) addHomeBtn();
       else if (isMaster()) addHeaderBtn();
+      addPPListHeaderBtn();
       /* DIRECT dans l'espace d'un SG pour MasterLog, Directeur, Censeur et superviseur (la règle du bouton existe déjà dans l'application) */
       if (me && me.role !== 'surv' && view.page === 'app' && !view.direct && view.tab === 'sga' && view.sg && !document.getElementById('dbtn') && typeof addDirect === 'function') addDirect();
     } catch (e) {}
@@ -2762,7 +3623,7 @@ function paperFrD(t){ return new Date(t + 'T12:00:00').toLocaleDateString('fr-FR
   var espMesOpen = false; /* liste « Mes classes » ouverte ou fermée */
   var espQuery = '';     /* saisie de recherche, conservée si la page se redessine */
   var espIsMaster = false; /* MasterLog : ouverture d'un espace professeur sans mot de passe */
-  var espSemChoice = 1;  /* 1 = 1er semestre, 2 = 2ème semestre, 3 = bilan annuel */
+  var espSemChoice = 1;  /* 1 = 1er semestre, 2 = 2ème semestre */
   var espFor = null;   /* professeur identifié, en attente de mot de passe */
   function espNrm(x){ return String(x || '').normalize('NFD').replace(/[\u0300-\u036f]/g, '').toUpperCase().replace(/\s+/g, ' ').trim(); }
   /* Professeur du collège = provenance vide ou CEG 1 ALLADA (les listes importées par l'AE ont la provenance CEG 1 ALLADA) */
@@ -2790,7 +3651,7 @@ function paperFrD(t){ return new Date(t + 'T12:00:00').toLocaleDateString('fr-FR
         if (!same && !fits) return;
         if (!espIsCollege(p)) { if (same) extHit = true; return; }
         var k = espKey(p.nom, p.prenoms);
-        var rec = { key: k, nom: p.nom, pre: p.prenoms, mat: p.mat || '' };
+        var rec = { key: k, nom: p.nom, pre: p.prenoms, mat: p.mat || x.mat || '' };
         if (same && !exact) exact = rec;
         if (!seen[k]) { seen[k] = true; out.push(rec); }
       });
@@ -2827,7 +3688,7 @@ function paperFrD(t){ return new Date(t + 'T12:00:00').toLocaleDateString('fr-FR
     var found = null;
     aes().forEach(function(x){
       (x.profs || []).forEach(function(p){
-        if (!found && espIsCollege(p) && espKey(p.nom, p.prenoms) === key) found = { key: key, nom: p.nom, pre: p.prenoms, mat: p.mat || '' };
+        if (!found && espIsCollege(p) && espKey(p.nom, p.prenoms) === key) found = { key: key, nom: p.nom, pre: p.prenoms, mat: p.mat || x.mat || '' };
       });
     });
     return found;
@@ -2839,7 +3700,7 @@ function paperFrD(t){ return new Date(t + 'T12:00:00').toLocaleDateString('fr-FR
     var list = espPrefixSearch(q).slice(0, 20);
     if (!list.length) return '<p class="mu">Aucun nom trouvé.</p>';
     return list.map(function(r){
-      return '<div class="cls"><button onclick="espPick(\'' + r.key + '\')">' + esc(r.nom + ' ' + r.pre) + ' · ' + esc(r.mat || '—') + '</button></div>';
+      return '<div class="cls"><button onclick="espPick(\'' + r.key + '\')">' + esc(r.nom + ' ' + r.pre) + ' · ' + esc(espMatByRec(r)) + '</button></div>';
     }).join('');
   }
   window.espSearch = function(q){
@@ -2858,7 +3719,7 @@ function paperFrD(t){ return new Date(t + 'T12:00:00').toLocaleDateString('fr-FR
         if (seen[k]) return;
         var have = espTokens(p.nom, p.prenoms).split(' ').filter(Boolean);
         var ok = want.every(function(t){ return have.some(function(h){ return h.indexOf(t) === 0; }); });
-        if (ok) { seen[k] = true; out.push({ key: k, nom: p.nom, pre: p.prenoms, mat: p.mat || '' }); }
+        if (ok) { seen[k] = true; out.push({ key: k, nom: p.nom, pre: p.prenoms, mat: p.mat || x.mat || '' }); }
       });
     });
     out.sort(function(a, b){ return String(a.nom).localeCompare(String(b.nom), 'fr') || String(a.pre).localeCompare(String(b.pre), 'fr'); });
@@ -2914,7 +3775,7 @@ function paperFrD(t){ return new Date(t + 'T12:00:00').toLocaleDateString('fr-FR
         if (!espIsCollege(p)) return;
         var k = espKey(p.nom, p.prenoms);
         if (seen[k]) return; seen[k] = true;
-        list.push({ key: k, nom: p.nom, pre: p.prenoms, mat: p.mat || '' });
+        list.push({ key: k, nom: p.nom, pre: p.prenoms, mat: p.mat || x.mat || '' });
       });
     });
     list.sort(function(a, b){ return String(a.nom).localeCompare(String(b.nom), 'fr') || String(a.pre).localeCompare(String(b.pre), 'fr'); });
@@ -2925,7 +3786,7 @@ function paperFrD(t){ return new Date(t + 'T12:00:00').toLocaleDateString('fr-FR
     list.forEach(function(e){
       var has = !!db.espPass[e.key];
       var nSel = (db.espSel[e.key] || []).length;
-      h += '<div class="cls" style="flex-wrap:wrap"><button onclick="espMasterOpen(\'' + e.key + '\')">' + esc(e.nom + ' ' + e.pre) + ' · ' + esc(e.mat || '—') + '</button> ' +
+      h += '<div class="cls" style="flex-wrap:wrap"><button onclick="espMasterOpen(\'' + e.key + '\')">' + esc(e.nom + ' ' + e.pre) + ' · ' + esc(espMatByRec(e)) + '</button> ' +
         '<span class="mu">' + (has ? 'compte créé · ' + nSel + ' classe(s)' : 'pas encore créé') + '</span>';
       if (has && espIsMasterUser()) {
         h += ' <span style="display:flex;gap:6px;flex-wrap:wrap;margin-top:4px">' +
@@ -2943,7 +3804,7 @@ function paperFrD(t){ return new Date(t + 'T12:00:00').toLocaleDateString('fr-FR
     var found = null;
     aes().forEach(function(x){
       (x.profs || []).forEach(function(p){
-        if (!found && espIsCollege(p) && espKey(p.nom, p.prenoms) === key) found = { key: key, nom: p.nom, pre: p.prenoms, mat: p.mat || '' };
+        if (!found && espIsCollege(p) && espKey(p.nom, p.prenoms) === key) found = { key: key, nom: p.nom, pre: p.prenoms, mat: p.mat || x.mat || '' };
       });
     });
     if (!found) return;
@@ -3070,29 +3931,85 @@ function paperFrD(t){ return new Date(t + 'T12:00:00').toLocaleDateString('fr-FR
   window.espMesToggle = function(){ espMesOpen = !espMesOpen; render(); };
   /* PROM-CLASS : ouverture / fermeture de la liste des promotions et classes */
   window.espPromToggle = function(){ espPromOpen = !espPromOpen; render(); };
-  /* Une classe sélectionnée par un professeur n'est plus sélectionnable par les autres */
-  function espLockedByOther(id){
-    espStore();
-    var mine = espCur ? espCur.key : null;
-    return Object.keys(db.espSel).some(function(k){ return k !== mine && (db.espSel[k] || []).indexOf(id) >= 0; });
+  /* Une classe peut avoir plusieurs professeurs, mais un seul par matière :
+     elle n'est verrouillée que si un autre professeur de la MÊME matière l'a déjà sélectionnée. */
+  function espSubjSlugs(rec){
+    if (!rec) return [];
+    if (espIsFrench(rec)) return ['FRANCAIS'];
+    var out = [];
+    (rec.key ? espAllMats(rec.key) : []).forEach(function(m){ var k = espSlug(m); if (k && out.indexOf(k) < 0) out.push(k); });
+    if (!out.length && rec.mat) out.push(espSlug(rec.mat));
+    return out.length ? out : ['?' + (rec.key || '')];
   }
-  /* Nom du professeur qui a déjà sélectionné cette classe (affiché aux autres professeurs) */
-  function espHolderName(id){
+  function espConflictKey(id){
     espStore();
     var mine = espCur ? espCur.key : null;
-    var k = Object.keys(db.espSel).find(function(k){ return k !== mine && (db.espSel[k] || []).indexOf(id) >= 0; });
-    if (!k) return '';
+    var my = espSubjSlugs(espCur);
+    return Object.keys(db.espSel).find(function(k){
+      if (k === mine || (db.espSel[k] || []).indexOf(id) < 0) return false;
+      var o = espSubjSlugs(espProfByKey(k));
+      return o.some(function(m){ return my.indexOf(m) >= 0; });
+    }) || null;
+  }
+  function espLockedByOther(id){ return !!espConflictKey(id); }
+  /* Nom du professeur de la même matière qui a déjà sélectionné cette classe */
+  function espHolderName(id){
+    var k = espConflictKey(id); if (!k) return '';
     var f = espProfByKey(k);
     return f ? (f.nom + ' ' + f.pre).trim() : '';
+  }
+  /* ----- Professeurs et matières d'une classe (déduits des sélections PROM-CLASS) ----- */
+  function espClassTeachers(cid){
+    espStore();
+    var out = [];
+    Object.keys(db.espSel).forEach(function(k){
+      if ((db.espSel[k] || []).indexOf(cid) < 0) return;
+      var f = espProfByKey(k); if (!f) return;
+      out.push({ key: k, nom: f.nom, pre: f.pre, mat: espMatByRec(f), slugs: espSubjSlugs(f) });
+    });
+    out.sort(function(a, b){ return String(a.mat).localeCompare(String(b.mat), 'fr') || String(a.nom).localeCompare(String(b.nom), 'fr'); });
+    return out;
+  }
+  /* Matières enseignées au collège (une par AE) qui n'ont encore aucun professeur dans cette classe */
+  function espMissingSubjects(cid){
+    var have = {};
+    espClassTeachers(cid).forEach(function(t){ t.slugs.forEach(function(m){ have[m] = true; }); });
+    var out = [], seen = {};
+    aes().forEach(function(x){
+      var m = String(x.mat || '').trim(); if (!m) return;
+      var k = espIsFrench({ mat: m }) ? 'FRANCAIS' : espSlug(m);
+      if (!have[k] && !seen[k]) { seen[k] = true; out.push(espIsFrench({ mat: m }) ? 'Français' : m); }
+    });
+    return out;
+  }
+  function espTeachersInline(cid){
+    var L = espClassTeachers(cid);
+    if (!L.length) return '<small class="mu">Aucun professeur inscrit</small>';
+    return '<small class="mu">' + L.map(function(t){ return esc(t.nom + ' ' + t.pre) + ' (' + esc(t.mat) + ')'; }).join(' · ') + '</small>';
+  }
+  function espTeachersCard(c){
+    var L = espClassTeachers(c.id), miss = espMissingSubjects(c.id);
+    var h = '<div class="card" id="espTeachers" style="margin:12px 0"><h3 style="margin:0 0 6px">🧑‍🏫 Professeurs de la classe ' + esc(c.name || '') + ' (' + L.length + ')</h3>';
+    if (!L.length) h += '<p class="mu">Aucun professeur n’a encore sélectionné cette classe (Espace professeur › PROM-CLASS).</p>';
+    else {
+      h += '<div class="wrap"><table><tr><th>Matière</th><th>Professeur</th></tr>' + L.map(function(t){
+        return '<tr><td>' + esc(t.mat) + '</td><td>' + esc(t.nom + ' ' + t.pre) + '</td></tr>';
+      }).join('') + '</table></div>';
+    }
+    if (miss.length && L.length) h += '<p class="mu" style="margin:8px 0 0">Matières sans professeur dans cette classe : ' + miss.map(esc).join(', ') + '</p>';
+    return h + '</div>';
+  }
+  function espInjectTeachers(){
+    if (typeof me === 'undefined' || !me || view.page !== 'app' || !view.cid) return;
+    if (me.role !== 'surv' && view.tab !== 'sga') return;
+    var m = document.getElementById('m'); if (!m || document.getElementById('espTeachers')) return;
+    var c = (db.classes || []).find(function(x){ return x.id === view.cid; }); if (!c) return;
+    m.insertAdjacentHTML('beforeend', espTeachersCard(c));
   }
   /* ----- Demandes de libération d'une classe prise par un autre professeur ----- */
   var ESP_ESCALADE_H = 24; /* au-delà de ce délai (en heures), la demande est signalée comme escaladée au MasterLog */
   function espReqs(){ espStore(); if (!db.espReq) db.espReq = {}; return db.espReq; }
-  function espHolderKey(id){
-    espStore();
-    var mine = espCur ? espCur.key : null;
-    return Object.keys(db.espSel).find(function(k){ return k !== mine && (db.espSel[k] || []).indexOf(id) >= 0; }) || null;
-  }
+  function espHolderKey(id){ return espConflictKey(id); }
   function espNameByKey(k){ var f = k ? espProfByKey(k) : null; return f ? (f.nom + ' ' + f.pre).trim() : '?'; }
   function espLockBtn(id){
     var rq = espReqs()[id];
@@ -3154,7 +4071,7 @@ function paperFrD(t){ return new Date(t + 'T12:00:00').toLocaleDateString('fr-FR
     if (!espCur) return;
     var sel = espSelOf(espCur.key);
     if (sel.indexOf(id) >= 0) return alert('Cette classe est déjà sélectionnée.');
-    if (espLockedByOther(id)) return alert('Cette classe est déjà sélectionnée par ' + espHolderName(id) + '.');
+    if (espLockedByOther(id)) return alert('Cette classe a déjà un professeur de ta matière : ' + espHolderName(id) + '.');
     sel.push(id); try { save(); } catch (e) {} render();
   };
   window.espRemove = function(id){
@@ -3166,6 +4083,98 @@ function paperFrD(t){ return new Date(t + 'T12:00:00').toLocaleDateString('fr-FR
     try { save(); } catch (e) {} render();
   };
   /* ----- Notes : moyennes ----- */
+  /* ===== Matières des professeurs =====
+     - Chaque professeur est associé à sa matière (colonne Discipline de la liste de son AE, ou à défaut la matière de l'AE).
+     - Un professeur de français choisit son cycle : 1er cycle = Communication Écrite + Lecture (chacune avec ses 3 tableaux),
+       2è cycle = Français (les notes déjà saisies restent là).
+     - Tout autre professeur qui figure avec plusieurs matières (listes de plusieurs AE) a un onglet par matière, chacune avec ses 3 tableaux.
+     - Le cycle et la matière choisis sont mémorisés dans les données. */
+  var ESP_SUBJ1 = [{ id: 'CE', name: 'Communication Écrite', suffix: '~CE' }, { id: 'LEC', name: 'Lecture', suffix: '~LEC' }];
+  function espSlug(x){ return espNrm(x).replace(/[^A-Z0-9]/g, ''); }
+  function espIsFrench(p){
+    var m = espSlug(p && p.mat);
+    return m.indexOf('FRANCAIS') >= 0 || m.indexOf('COMMUNICATION') >= 0 || m.indexOf('LECTURE') >= 0 || m === 'FR' || m === 'FRA';
+  }
+  /* Toutes les matières d'un professeur (une par discipline distincte dans les listes des AE) */
+  function espAllMats(key){
+    var out = [], seen = {};
+    aes().forEach(function(x){
+      (x.profs || []).forEach(function(p){
+        if (!espIsCollege(p) || espKey(p.nom, p.prenoms) !== key) return;
+        var m = String(p.mat || x.mat || '').trim(), k = espSlug(m);
+        if (m && !seen[k]) { seen[k] = true; out.push(m); }
+      });
+    });
+    return out;
+  }
+  function espCycleOf(key){ return (db.espCycle && db.espCycle[key]) || 0; }
+  /* Matières proposées au professeur connecté : [{id, name, suffix}] (vide ou 1 seule = pas d'onglets) */
+  function espSubjList(){
+    if (!espCur) return [];
+    if (espIsFrench(espCur)) return espCycleOf(espCur.key) === 1 ? ESP_SUBJ1 : [];
+    var mats = espAllMats(espCur.key);
+    return mats.length > 1 ? mats.map(function(m, i){ return { id: espSlug(m), name: m, suffix: i === 0 ? '' : '~' + espSlug(m) }; }) : [];
+  }
+  function espSubjItem(){
+    var list = espSubjList(); if (list.length < 2) return null;
+    var v = db.espSubj && espCur && db.espSubj[espCur.key];
+    return list.find(function(x){ return x.id === v; }) || list[0];
+  }
+  function espSubjGet(){ var it = espSubjItem(); return it ? it.id : ''; }
+  function espSubjSuffix(){ var it = espSubjItem(); return it ? it.suffix : ''; }
+  function espNKey(){ return espCur.key + espSubjSuffix(); }
+  function espSubjName(){
+    var it = espSubjItem(); if (it) return it.name;
+    if (espCur && espIsFrench(espCur) && espCycleOf(espCur.key) === 2) return 'Français';
+    return (espCur && espCur.mat) || '—';
+  }
+  /* Libellé de matière (en-têtes et listes) : tient compte du cycle et de toutes les matières */
+  function espMatByRec(r){
+    if (!r) return '—';
+    var cy = r.key ? espCycleOf(r.key) : 0;
+    if (espIsFrench(r) && cy === 1) return 'Communication Écrite et Lecture (1er cycle)';
+    if (espIsFrench(r) && cy === 2) return 'Français (2è cycle)';
+    var mats = r.key && !espIsFrench(r) ? espAllMats(r.key) : [];
+    return mats.length > 1 ? mats.join(' · ') : (r.mat || mats[0] || '—');
+  }
+  function espMatLabel(){ return espMatByRec(espCur); }
+  window.espSetCycle = function(n){
+    if (espGuard()) return;
+    if (!espCur || !espIsFrench(espCur)) return;
+    var cur = espCycleOf(espCur.key);
+    if (cur === n) return;
+    if (cur && !confirm('Changer de cycle ? Les notes déjà saisies restent conservées dans leur cycle.')) return;
+    if (!db.espCycle) db.espCycle = {};
+    db.espCycle[espCur.key] = n;
+    if (!db.espSubj) db.espSubj = {};
+    delete db.espSubj[espCur.key]; espSemChoice = 1;
+    try { save(); } catch (e) {}
+    render();
+  };
+  window.espSubj = function(id){
+    if (!espCur) return;
+    if (!db.espSubj) db.espSubj = {};
+    db.espSubj[espCur.key] = id; espSemChoice = 1;
+    try { save(); } catch (e) {}
+    render();
+  };
+  function espCycleHtml(){
+    if (!espCur || !espIsFrench(espCur)) return '';
+    var cy = espCycleOf(espCur.key);
+    var b = function(n, l){ return '<button class="' + (cy === n ? 'hb' : 's') + '" onclick="espSetCycle(' + n + ')">' + l + '</button> '; };
+    return '<div class="card" style="margin:8px 0"><b>🎓 Cycle d’enseignement</b>' +
+      '<p class="mu" style="margin:4px 0 8px">' + (cy === 1 ? '1er cycle : deux matières, <b>Communication Écrite</b> et <b>Lecture</b>, chacune avec ses tableaux de notes.' :
+        cy === 2 ? '2è cycle : une seule matière, <b>Français</b>.' :
+        'Choisis ton cycle. 1er cycle : Communication Écrite et Lecture. 2è cycle : Français.') + '</p>' +
+      '<div class="row">' + b(1, '1er cycle') + b(2, '2è cycle') + '</div></div>';
+  }
+  function espSubjTabsHtml(){
+    var list = espSubjList(); if (list.length < 2) return '';
+    var cur = espSubjGet();
+    return '<div class="row">' + list.map(function(x){
+      return '<button class="' + (cur === x.id ? 'hb' : 's') + '" onclick="espSubj(\'' + x.id + '\')">📗 ' + esc(x.name) + '</button> ';
+    }).join('') + '</div>';
+  }
   function espNotesOf(key, cid){
     if (!db.espNotes) db.espNotes = {};
     if (!db.espNotes[key]) db.espNotes[key] = {};
@@ -3198,13 +4207,13 @@ function paperFrD(t){ return new Date(t + 'T12:00:00').toLocaleDateString('fr-FR
       .sort(function(a, b){ return String(a.name || '').localeCompare(String(b.name || ''), 'fr'); });
   }
   window.espOpenClass = function(id){ espClassId = id; espSemChoice = 1; render(); };
-  window.espSem = function(n){ espSemChoice = n; render(); };
+  window.espSem = function(n){ espSemChoice = (n === 2) ? 2 : 1; render(); };
   window.espBackClasses = function(){ espClassId = null; render(); };
   function espRowsOf(N, sem){ return sem === 2 ? N.rows2 : N.rows; }
   window.espSetNote = function(cid, sid, f, el, sem){
     if (espGuard()) return;
     if (!espCur) return;
-    var N = espNotesOf(espCur.key, cid);
+    var N = espNotesOf(espNKey(), cid);
     var rows = espRowsOf(N, sem);
     var r = rows[sid] || (rows[sid] = {});
     var raw = String(el.value).trim().replace(',', '.');
@@ -3229,7 +4238,7 @@ function paperFrD(t){ return new Date(t + 'T12:00:00').toLocaleDateString('fr-FR
   };
   window.espSetAppr = function(cid, sid, sem, el){
     if (!espCur) return;
-    var N = espNotesOf(espCur.key, cid);
+    var N = espNotesOf(espNKey(), cid);
     var txt = String(el.value || '').trim().slice(0, 150);
     if (sem === 3) { if (!N.apBil) N.apBil = {}; N.apBil[sid] = txt; }
     else { var rows = espRowsOf(N, sem); var r = rows[sid] || (rows[sid] = {}); r.ap = txt; }
@@ -3238,7 +4247,7 @@ function paperFrD(t){ return new Date(t + 'T12:00:00').toLocaleDateString('fr-FR
   window.espSetCoef = function(cid, v){
     if (espGuard()) return;
     if (!espCur) return;
-    var N = espNotesOf(espCur.key, cid);
+    var N = espNotesOf(espNKey(), cid);
     var n = espNum(v);
     N.coef = n === null ? 0 : Math.max(0, n);
     try { save(); } catch (e) {}
@@ -3297,7 +4306,7 @@ function paperFrD(t){ return new Date(t + 'T12:00:00').toLocaleDateString('fr-FR
     }
     return list;
   }
-  /* ----- Synthèse en bas de chaque tableau (1er semestre, 2ème semestre, bilan annuel) ----- */
+  /* ----- Synthèse en bas de chaque tableau (1er semestre, 2ème semestre) ----- */
   var ESP_APPR_LIST = ['Médiocre', 'Très faible', 'Faible', 'Insuffisant', 'Passable', 'Assez bien', 'Bien', 'Très bien', 'Excellent'];
   function espPc(k, n){ return n ? (k * 100 / n).toFixed(1).replace('.', ',') + ' %' : '0 %'; }
   function espSummaryHtml(studs, avgOf){
@@ -3323,42 +4332,18 @@ function paperFrD(t){ return new Date(t + 'T12:00:00').toLocaleDateString('fr-FR
       '<div class="wrap"><table><tr><th>Appréciation</th><th>Élèves</th><th>Pourcentage</th></tr>' + rows + '</table></div>' +
       '<p class="mu">Pourcentages calculés sur les ' + n + ' élève(s) ayant une moyenne.</p></div>';
   }
-  /* Moyenne annuelle = (moyenne 1er semestre + 2 x moyenne 2ème semestre) / 3 */
-  function espBilanHtml(c){
-    var N = espNotesOf(espCur.key, c.id);
-    var studs = espStudents(c.id);
-    var data = {};
-    studs.forEach(function(st){
-      var m1 = espSemMc(N, st.id, 1), m2 = espSemMc(N, st.id, 2);
-      data[st.id] = { m1: m1, m2: m2, an: (m1 !== null && m2 !== null) ? (m1 + 2 * m2) / 3 : null };
-    });
-    var rankOf = {};
-    studs.forEach(function(st){
-      var an = data[st.id].an;
-      rankOf[st.id] = an === null ? null : 1 + studs.filter(function(o){ return data[o.id].an !== null && data[o.id].an > an; }).length;
-    });
-    var list = espOrdered(studs, function(st){ return data[st.id].an; });
-    var num = {}; studs.forEach(function(st, i){ num[st.id] = i + 1; });
-    var h = espSortBar() + '<div class="wrap"><table><tr><th>N° d’ordre</th><th>Nom et prénoms</th><th>Moy 1er sem.</th><th>Moy 2ème sem.</th><th>Moy annuelle</th><th>Rang</th><th>Appréciation (automatique)</th></tr>';
-    list.forEach(function(st){
-      var d = data[st.id];
-      h += '<tr><td>' + num[st.id] + '</td><td>' + esc(st.name || '') + '</td><td>' + espFmt(d.m1) + '</td><td>' + espFmt(d.m2) +
-        '</td><td><b>' + espFmt(d.an) + '</b></td><td>' + (rankOf[st.id] === null ? '—' : rankOf[st.id]) + '</td>' +
-        '<td>' + espAppr(d.an) + '</td></tr>';
-    });
-    if (!studs.length) h += '<tr><td colspan="7" class="mu">Aucun élève dans cette classe.</td></tr>';
-    return h + '</table></div><p class="mu">Moyenne annuelle = (moyenne du 1er semestre + 2 × moyenne du 2ème semestre) / 3, avec les moyennes coefficiées. Rang : 1 = meilleure moyenne annuelle.</p>' + espSummaryHtml(studs, function(st){ return data[st.id].an; });
-  }
   function espClassHtml(c){
-    var N = espNotesOf(espCur.key, c.id);
+    if (espIsFrench(espCur) && !espCycleOf(espCur.key)) {
+      return '<div class="row"><button class="s" onclick="espBackClasses()">← Mes classes</button></div>' + espCycleHtml();
+    }
+    var N = espNotesOf(espNKey(), c.id);
     var sem = espSemChoice;
     var tab = function(n, label){ return '<button class="' + (sem === n ? 'hb' : 's') + '" onclick="espSem(' + n + ')">' + label + '</button> '; };
     var h = '<div class="row"><button class="s" onclick="espBackClasses()">← Mes classes</button></div>' +
-      '<h3 style="margin:8px 0">📘 ' + esc(c.name || '?') + ' · ' + esc(c.annee || '') + ' · ' + esc(pn(c.owner, c.promo || 'A')) + '</h3>' +
+      '<h3 style="margin:8px 0">📘 ' + esc(c.name || '?') + ' · ' + esc(c.annee || '') + ' · ' + esc(pn(c.owner, c.promo || 'A')) + '</h3>' + espSubjTabsHtml() +
       '<div class="row"><label>Coefficient de la classe : <input type="number" min="0" step="0.5" value="' + N.coef + '" style="width:90px;height:34px" ' +
       'onchange="espSetCoef(\'' + c.id + '\',this.value)"></label></div>' +
-      '<div class="row">' + tab(1, '1er Semestre') + tab(2, '2ème Semestre') + tab(3, 'Bilan annuel') + '</div>';
-    if (sem === 3) return h + espBilanHtml(c);
+      '<div class="row">' + tab(1, '1er Semestre') + tab(2, '2ème Semestre') + '</div>';
     var rows = espRowsOf(N, sem);
     var studs = espStudents(c.id);
     var inp = function(sid, f, r){
@@ -3388,29 +4373,12 @@ function paperFrD(t){ return new Date(t + 'T12:00:00').toLocaleDateString('fr-FR
   }
   /* ----- Export des tableaux en PDF et Excel (même contenu que le tableau affiché) ----- */
   function espTableData(c){
-    var N = espNotesOf(espCur.key, c.id), sem = espSemChoice;
+    var N = espNotesOf(espNKey(), c.id), sem = espSemChoice;
     var studs = espStudents(c.id), num = {};
     studs.forEach(function(st, i){ num[st.id] = i + 1; });
     var v = function(x){ return (x === '' || x === undefined || x === null) ? '' : x; };
     var out = { coef: N.coef, title: '', head: [], body: [] };
-    if (sem === 3) {
-      out.title = 'Bilan annuel';
-      var data = {};
-      studs.forEach(function(st){
-        var m1 = espSemMc(N, st.id, 1), m2 = espSemMc(N, st.id, 2);
-        data[st.id] = { m1: m1, m2: m2, an: (m1 !== null && m2 !== null) ? (m1 + 2 * m2) / 3 : null };
-      });
-      var rankOf = {};
-      studs.forEach(function(st){
-        var an = data[st.id].an;
-        rankOf[st.id] = an === null ? '—' : 1 + studs.filter(function(o){ return data[o.id].an !== null && data[o.id].an > an; }).length;
-      });
-      out.head = ['N° d’ordre', 'Nom et prénoms', 'Moy 1er sem.', 'Moy 2ème sem.', 'Moy annuelle', 'Rang', 'Appréciation'];
-      espOrdered(studs, function(st){ return data[st.id].an; }).forEach(function(st){
-        var d = data[st.id];
-        out.body.push([num[st.id], st.name || '', espFmt(d.m1), espFmt(d.m2), espFmt(d.an), rankOf[st.id], espAppr(d.an)]);
-      });
-    } else {
+    {
       var rows = espRowsOf(N, sem);
       out.title = sem === 2 ? '2ème Semestre' : '1er Semestre';
       var mcOf2 = function(st){ return espCalc(rows[st.id] || {}, N.coef).mc; };
@@ -3424,10 +4392,10 @@ function paperFrD(t){ return new Date(t + 'T12:00:00').toLocaleDateString('fr-FR
     return out;
   }
   function espFileName(c, title, ext){
-    return 'notes_' + (c.name || 'classe') + '_' + title + '.' + ext;
+    return 'notes_' + (c.name || 'classe') + (espSubjSuffix() ? '_' + espSubjName() : '') + '_' + title + '.' + ext;
   }
   function espInfoLine(c, coef){
-    return 'Professeur : ' + espCur.nom + ' ' + espCur.pre + ' · Matière : ' + (espCur.mat || '—') +
+    return 'Professeur : ' + espCur.nom + ' ' + espCur.pre + ' · Matière : ' + espSubjName() +
       ' · Classe : ' + (c.name || '') + ' · Année : ' + (c.annee || '') + ' · Coefficient : ' + coef +
       ' · Tri : ' + (espSortMode === 'merit' ? 'ordre de mérite' : 'ordre alphabétique');
   }
@@ -3468,7 +4436,7 @@ function paperFrD(t){ return new Date(t + 'T12:00:00').toLocaleDateString('fr-FR
       h += espMasterList();
     } else if (!espCur && !espFor && espLastGet() && db.espPass && db.espPass[espLastGet()] && espProfByKey(espLastGet())) {
       espFor = espProfByKey(espLastGet());
-      h += '<p><b>' + esc(espFor.nom) + ' ' + esc(espFor.pre) + '</b> · ' + esc(espFor.mat || '—') + '</p>' +
+      h += '<p><b>' + esc(espFor.nom) + ' ' + esc(espFor.pre) + '</b> · ' + esc(espMatByRec(espFor)) + '</p>' +
         '<p class="mu">Entre ton mot de passe.</p>';
       h += '<div class="row"><input id="espPw" type="password" placeholder="Mot de passe" style="width:100%;height:40px"></div>' +
         '<div class="row"><button type="button" class="s" onclick="aeEyeInput(\'espPw\')">👁 Afficher / masquer</button></div>' +
@@ -3498,12 +4466,13 @@ function paperFrD(t){ return new Date(t + 'T12:00:00').toLocaleDateString('fr-FR
       var sel = espSelOf(espCur.key);
       if (espIsMaster) h += '<p class="mu" style="margin:0 0 6px">' + (espIsMasterUser() ? 'Mode MasterLog' : 'Consultation') + ' : espace du professeur ouvert sans mot de passe.</p>';
       h += '<p style="margin:0 0 4px"><b>' + esc(espCur.nom) + ' ' + esc(espCur.pre) + '</b></p>' +
-        '<p class="mu" style="margin:0 0 8px">Matière : <b>' + esc(espCur.mat || '—') + '</b></p>' +
+        '<p class="mu" style="margin:0 0 8px">Matière : <b>' + esc(espMatLabel()) + '</b></p>' +
         (espIsMaster ? '<div class="row"><button class="s" onclick="espMasterBack()">← Liste des professeurs</button></div>' : '<div class="row"><button class="s" onclick="espLogout()">Se déconnecter</button></div>');
       if (espClassId && espClassById(espClassId) && sel.indexOf(espClassId) >= 0) {
         h += espClassHtml(espClassById(espClassId));
       } else {
         espClassId = null;
+        h += espCycleHtml();
         Object.keys(espReqs()).forEach(function(cid){
           var rq = espReqs()[cid], c = espClassById(cid);
           if (!rq || rq.to !== espCur.key || sel.indexOf(cid) < 0 || !c) return;
@@ -3529,7 +4498,7 @@ function paperFrD(t){ return new Date(t + 'T12:00:00').toLocaleDateString('fr-FR
             (espSgName(g.owner) ? ' <span class="mu">· ' + esc(espSgName(g.owner)) + '</span>' : '');
           g.classes.forEach(function(c){
             var ok = sel.indexOf(c.id) >= 0;
-            h += '<div class="cls"><span>' + esc(c.name || '?') + ' · ' + esc(c.annee || '') + '</span> ' +
+            h += '<div class="cls"><span>' + esc(c.name || '?') + ' · ' + esc(c.annee || '') + '<br>' + espTeachersInline(c.id) + '</span> ' +
               (ok ? '<button class="s" disabled>✔ Sélectionnée</button>' : espLockedByOther(c.id) ? espLockBtn(c.id) : '<button onclick="espAdd(\'' + c.id + '\')">➕ Sélectionner</button>') + '</div>';
           });
           h += '</div>';
@@ -3556,6 +4525,47 @@ function paperFrD(t){ return new Date(t + 'T12:00:00').toLocaleDateString('fr-FR
     b.onclick = function(){ espIsMaster = true; espCur = null; espFor = null; espClassId = null; go('espprof'); };
     ref.parentNode.insertBefore(b, ref);
   }
+  /* ----- MasterLog : un seul bouton « AE-PP-Prf-Bult » regroupe AE, PP, bulletins et professeurs ----- */
+  function openGroupPanel(){
+    var o = document.getElementById('agrpov');
+    if (!o) {
+      o = document.createElement('div');
+      o.id = 'agrpov';
+      o.style.cssText = 'position:fixed;inset:0;z-index:200;background:rgba(20,22,40,.45);display:flex;align-items:center;justify-content:center;padding:16px';
+      o.innerHTML = '<div style="background:var(--bg,#fff);color:var(--tx,#2A2F45);border-radius:12px;padding:16px;max-width:360px;width:100%">' +
+        '<h3 style="margin:0 0 10px">AE-PP-Prf-Bult</h3>' +
+        '<div style="display:grid;gap:8px">' +
+        '<button id="agr1">📚 Les AE</button>' +
+        '<button id="agr2">📋 Liste des PP et bulletins</button>' +
+        '<button id="agr3">🧑‍🏫 Espaces prof</button>' +
+        '</div>' +
+        '<div style="text-align:right;margin-top:12px"><button class="s" id="agrx">✕ Fermer</button></div></div>';
+      document.body.appendChild(o);
+      o.addEventListener('click', function(e){ if (e.target === o) o.hidden = true; });
+      document.getElementById('agrx').onclick = function(){ o.hidden = true; };
+      document.getElementById('agr1').onclick = function(){ o.hidden = true; go('ae'); };
+      document.getElementById('agr2').onclick = function(){ o.hidden = true; window.ppOpenList(); };
+      document.getElementById('agr3').onclick = function(){ o.hidden = true; espIsMaster = true; espCur = null; espFor = null; espClassId = null; go('espprof'); };
+    }
+    o.hidden = false;
+  }
+  function addGroupBtn(){
+    if (!isMaster()) return;
+    ['baeh', 'besph', 'bppl'].forEach(function(id){ var x = document.getElementById(id); if (x) x.style.display = 'none'; });
+    if (document.getElementById('bgrp')) return;
+    var lo = Array.from(document.querySelectorAll('header button')).find(function(x){ return x.getAttribute('onclick') === 'logout()'; });
+    if (!lo) return;
+    var b = document.createElement('button');
+    b.id = 'bgrp'; b.className = 's'; b.textContent = 'AE-PP-Prf-Bult';
+    b.onclick = openGroupPanel;
+    lo.parentNode.insertBefore(b, lo);
+  }
+  var prevGroupRender = window.render;
+  window.render = function(){
+    var r = prevGroupRender.apply(this, arguments);
+    try { addGroupBtn(); } catch (e) {}
+    return r;
+  };
   /* Accueil : le bouton « Recherche d'un élève » reste au-dessus du bouton du Directeur */
   function homeOrderFix(){
     var nav = document.querySelector('#home .hside nav'); if (!nav) return;
@@ -3568,6 +4578,7 @@ function paperFrD(t){ return new Date(t + 'T12:00:00').toLocaleDateString('fr-FR
   window.render = function(){
     if (view.page === 'espprof') { renderEsp(); return; }
     var r = prevEspRender.apply(this, arguments);
+    try { espInjectTeachers(); } catch (e) {}
     try {
       if (!(typeof me !== 'undefined' && me)) addEspBtn();
       else if (espIsMasterUser()) addEspHeaderBtn();
