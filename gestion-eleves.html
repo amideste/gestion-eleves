@@ -2067,8 +2067,18 @@ function paperFrD(t){ return new Date(t + 'T12:00:00').toLocaleDateString('fr-FR
   function commit(){ try { if (window.ppNormalizeCoefs) window.ppNormalizeCoefs(); } catch (e) {} try { save(); } catch (e) {} try { render(); } catch (e) {} }
 
   /* ----- pages ----- */
+  /* Ouverture « Les AE et PP » : deux boutons séparés, Les AE et Les PP, chacun avec Retour / Fermer */
+  function renderAEPPHub(a){
+    a.innerHTML = '<main><div class="row"><button class="s" onclick="aeBack()">✖ Fermer</button></div>' +
+      '<div class="card"><h2>📚 Les AE et PP</h2><p class="mu">Choisis l’espace à ouvrir.</p>' +
+      '<div style="display:flex;flex-direction:column;gap:10px;margin-top:12px">' +
+      '<button onclick="go(\'ae\',{target:null})" style="font-size:17px;padding:14px">📚 Les AE</button>' +
+      '<button onclick="ppOpenHub()" style="font-size:17px;padding:14px">📋 Les PP</button>' +
+      '</div></div></main>';
+  }
   function renderAE(){
     var a = $('app'); if (!a) return;
+    if (view.target === 'aepp') return renderAEPPHub(a);
     if (view.target === 'pp') return renderPP(a);
     var t = view.target ? aeOne(view.target) : null;
     if (t) return renderOne(a, t);
@@ -2081,9 +2091,8 @@ function paperFrD(t){ return new Date(t + 'T12:00:00').toLocaleDateString('fr-FR
       return '<div class="cls" style="cursor:pointer" onclick="aeOpen(\'' + x.id + '\')"><b>' + esc(x.name) + '</b>' +
         '<span><span class="mu">' + (x.profs || []).length + ' professeur(s)</span>' + (x.pass ? ' 🔒' : '') + (isMaster() && x.pass ? ' ' + codeBand(x) : '') + tools + '</span></div>';
     }).join('');
-    a.innerHTML = '<main><div class="row"><button class="s" onclick="aeBack()">← Retour</button></div>' +
+    a.innerHTML = '<main><div class="row"><button class="s" onclick="go(\'ae\',{target:\'aepp\'})">← Retour</button> <button class="s" onclick="aeBack()">✖ Fermer</button></div>' +
       ((me && me.role === 'surv') || isStaffAE() ? allProfsHtml(isStaffAE()) : '') + '<div class="card"><h2>📚 Les AE</h2><p class="mu">AE = Animateur d’établissement. Choisis l’AE de la matière pour gérer ses professeurs.</p>' +
-      '<div class="row" style="margin:0 0 12px"><button onclick="ppListOn=false;go(\'ae\',{target:\'pp\'})">👨‍🏫 Professeur principal (PP)</button></div>' +
       (isMaster() ? ppAccessAdminHtml() : '') +
       rows + (isMaster() ? '<div class="row" style="margin-top:12px"><button onclick="aeAdd()">+ Ajouter un AE</button></div>' : '') +
       '</div></main>';
@@ -2124,7 +2133,7 @@ function paperFrD(t){ return new Date(t + 'T12:00:00').toLocaleDateString('fr-FR
   }
   var ppCid = null, ppSem = 1, ppListOn = false;
   window.ppOpen = function(id){ ppCid = id; ppSem = 1; ppBulletinOn = false; render(); };
-  window.ppBack = function(){ ppCid = null; ppBulletinOn = false; ppHubCid = null; render(); };
+  window.ppBack = function(){ ppCid = null; ppBulletinOn = false; ppHubCid = null; if (!ppIsMaster()) ppUnlocked = {}; render(); };
   window.ppSemSet = function(n){ ppSem = n; render(); };
   /* Colonnes « matière » d'une classe : une par matière des professeurs qui l'ont sélectionnée (PROM-CLASS) */
   /* Matières du tableau PP : toutes les AE, dans l'ordre des AE (sans attendre le choix de la classe par les professeurs) */
@@ -2164,11 +2173,25 @@ function paperFrD(t){ return new Date(t + 'T12:00:00').toLocaleDateString('fr-FR
   /* Moy coef d'un élève dans une matière : 1 = 1er sem., 2 = 2ème sem., 3 = annuelle */
   function ppExemptOf(cid, sid, aeId){ var e = db.ppExempt; return !!(e && e[cid] && e[cid][sid] && e[cid][sid][aeId]); }
   /* Détail d'une matière pour un élève : moyenne des interrogations, devoir 1, devoir 2 (semestre donné) */
+  function ppDevTxt(x){
+    var n = espNum(x);
+    if (n !== null) return espFmt(n);
+    var mk = espMarker(x);
+    return mk ? mk : '—';
+  }
+  function ppMarked(k, cid, sid, sem){
+    if (!k.key) return false;
+    var N = db.espNotes && db.espNotes[k.key] && db.espNotes[k.key][cid];
+    if (!N) return false;
+    var rows = sem === 2 ? (N.rows2 || {}) : (N.rows || {});
+    var r = rows[sid] || {};
+    return !!(espMarker(r.d1) || espMarker(r.d2));
+  }
   function ppDetailOf(k, cid, sid, sem){
     var N = db.espNotes && db.espNotes[k.key] && db.espNotes[k.key][cid];
     var R = N ? (sem === 2 ? N.rows2 : N.rows) : null;
     var r = (R && R[sid]) ? R[sid] : {};
-    return { mi: espFmt(espCalc(r, 1).mi), d1: espFmt(espNum(r.d1)), d2: espFmt(espNum(r.d2)) };
+    return { mi: espFmt(espCalc(r, 1).mi), d1: ppDevTxt(r.d1), d2: ppDevTxt(r.d2) };
   }
   /* Cellules « Interro. / Dev. 1 / Dev. 2 » du bulletin à l'écran */
   function ppDetCells(k, cid, sid, sem, dispense){
@@ -2238,6 +2261,7 @@ function paperFrD(t){ return new Date(t + 'T12:00:00').toLocaleDateString('fr-FR
     return cols.reduce(function(sum, k){
       if (!k.key) return sum;
       if (sid && k.ae && ppExemptOf(c.id, sid, k.ae)) return sum;
+      if (sid && ppMarked(k, c.id, sid, sem)) return sum;
       var filled = ppActivated(k, c.id, sem);
       if (!filled) return sum;
       var N = db.espNotes && db.espNotes[k.key] && db.espNotes[k.key][c.id]; var x = N ? espNum(N.coef) : null;
@@ -2248,6 +2272,7 @@ function paperFrD(t){ return new Date(t + 'T12:00:00').toLocaleDateString('fr-FR
   function ppCellTxt(k, cid, sid, sem){
     if (k.ae && ppExemptOf(cid, sid, k.ae)) return 'Dispensé';
     var v = ppAvg(k, cid, sid, sem);
+    if (ppMarked(k, cid, sid, sem)) return '—';
     /* Matière notée pour la classe mais sans note pour cet élève : 0 (même règle que le calcul) */
     if (v === null && k.key && espStudents(cid).some(function(o){ return ppAvg(k, cid, o.id, sem) !== null; })) v = 0;
     return espFmt(v);
@@ -2428,7 +2453,7 @@ function paperFrD(t){ return new Date(t + 'T12:00:00').toLocaleDateString('fr-FR
     return { max: Math.max.apply(null, v), min: Math.min.apply(null, v) };
   }
   var ppBulletinOn = false, ppBulletinSem = 1, ppBulletinAll = false;
-  window.ppBulletinOpen = function(){ ppBulletinSem = ppSem === 2 ? 2 : 1; ppBulletinOn = true; render(); };
+  window.ppBulletinOpen = function(){ if (!ppCanSeeBul()) return alert('Le MasterLog a bloqué la consultation des bulletins pour les PP.'); ppBulletinSem = ppSem === 2 ? 2 : 1; ppBulletinOn = true; render(); };
   window.ppBulletinClose = function(){ ppBulletinOn = false; ppBulletinAll = false; if (ppHubOn) { ppHubCid = null; ppCid = null; } render(); };
   window.ppBulletinAllToggle = function(){ ppBulletinAll = !ppBulletinAll; render(); };
   window.ppBulletinSemSet = function(n){ ppBulletinSem = n; render(); };
@@ -2563,7 +2588,7 @@ function paperFrD(t){ return new Date(t + 'T12:00:00').toLocaleDateString('fr-FR
         '<table class="bt"><tr><th>Matière</th><th>Coef</th><th>MI</th><th>D1s' + sem + '</th><th>D2s' + sem + '</th><th>Moy matière</th><th>Moy coef</th><th>Appréciation</th></tr>' + rowsHtml + '</table>' +
         '<div class="bul-sum">' + summary + '</div>' + extra +
         '<div class="bul-sign"><span>Le professeur principal</span><span>Le chef d’établissement</span></div>' +
-        (bulBlocked('indiv') ? '' : '<div class="no-print" style="text-align:center;padding:0 18px 16px"><button onclick="ppBulletinOne(' + i + ')">⬇ PDF de cet élève (1er et 2ème semestre)</button></div>') +
+        ((bulBlocked('indiv') || !ppCanDl()) ? '' : '<div class="no-print" style="text-align:center;padding:0 18px 16px"><button onclick="ppBulletinOne(' + i + ')">⬇ PDF de cet élève (1er et 2ème semestre)</button></div>') +
         '</section>';
     };
     var sections = '';
@@ -2572,7 +2597,7 @@ function paperFrD(t){ return new Date(t + 'T12:00:00').toLocaleDateString('fr-FR
     if (!n) sections = '<p class="mu">Aucun élève dans cette classe.</p>';
     var sw = function(v, t){ return '<button class="' + (sem === v ? 'hb' : 's') + '" onclick="ppBulletinSemSet(' + v + ')">' + t + '</button> '; };
     return '<main><div class="row no-print"><button class="s" onclick="ppBulletinClose()">← Retour à la classe</button> ' +
-      '<input type="search" placeholder="Rechercher un élève" oninput="ppBulSearch(this.value)" style="height:36px;min-width:200px"> ' + sw(1, 'Bulletin 1er Semestre') + sw(2, 'Bulletin 2ème Semestre') + (bulBlocked('bloc') ? '' : '<button onclick="ppBulletinPdf()">⬇ PDF (tous les bulletins)</button> ') + '<button class="s" onclick="ppBulletinAllToggle()">👁 ' + (ppBulletinAll ? 'Un seul semestre' : 'Voir tous les bulletins') + '</button> <button class="s" onclick="window.print()">🖨 Imprimer</button></div>' +
+      '<input type="search" placeholder="Rechercher un élève" oninput="ppBulSearch(this.value)" style="height:36px;min-width:200px"> ' + sw(1, 'Bulletin 1er Semestre') + sw(2, 'Bulletin 2ème Semestre') + ((bulBlocked('bloc') || !ppCanDl()) ? '' : '<button onclick="ppBulletinPdf()">⬇ PDF (tous les bulletins)</button> ') + '<button class="s" onclick="ppBulletinAllToggle()">👁 ' + (ppBulletinAll ? 'Un seul semestre' : 'Voir tous les bulletins') + '</button> <button class="s" onclick="window.print()">🖨 Imprimer</button></div>' +
       style + '<div class="bul-wrap">' + sections + '</div></main>';
   }
   /* Recherche d'un élève dans les bulletins affichés (sans recharger la page) */
@@ -2585,6 +2610,7 @@ function paperFrD(t){ return new Date(t + 'T12:00:00').toLocaleDateString('fr-FR
   };
   /* PDF du bulletin d'un seul élève : 1er semestre puis 2ème semestre */
   window.ppBulletinOne = function(i){
+    if (!ppCanDl()) return alert('Seuls le Directeur, le Censeur et le MasterLog peuvent télécharger les bulletins.');
     if (bulBlocked('indiv')) return alert('Le téléchargement individuel est bloqué par le MasterLog.');
     var c = (db.classes || []).find(function(x){ return x.id === ppCid; });
     if (!c) return alert('Classe introuvable.');
@@ -2614,6 +2640,7 @@ function paperFrD(t){ return new Date(t + 'T12:00:00').toLocaleDateString('fr-FR
   }
   /* Matière notée pour la classe mais sans aucune note pour cet élève : compte 0, coefficient gardé */
   function ppAvgZ(k, c, st, sem){
+    if (ppMarked(k, c.id, st.id, sem)) return null;
     var v = ppAvg(k, c.id, st.id, sem);
     if (v !== null) return v;
     if (!k.key || (k.ae && ppExemptOf(c.id, st.id, k.ae))) return null;
@@ -2724,6 +2751,7 @@ function paperFrD(t){ return new Date(t + 'T12:00:00').toLocaleDateString('fr-FR
     doc.text('Le chef d’établissement', W - M - 10, sy, { align: 'right' });
   }
   window.ppBulletinPdf = function(){
+    if (!ppCanDl()) return alert('Seuls le Directeur, le Censeur et le MasterLog peuvent télécharger les bulletins.');
     if (bulBlocked('bloc')) return alert('Le téléchargement par bloc est bloqué par le MasterLog.');
     var c = (db.classes || []).find(function(x){ return x.id === ppCid; });
     if (!c) return alert('Classe introuvable.');
@@ -2755,6 +2783,7 @@ function paperFrD(t){ return new Date(t + 'T12:00:00').toLocaleDateString('fr-FR
   }
   function ppMatVal(k, cid, sid, sem){
     if (k.ae && ppExemptOf(cid, sid, k.ae)) return null;
+    if (ppMarked(k, cid, sid, sem)) return null;
     var v = ppAvg(k, cid, sid, sem);
     if (v === null && k.key && espStudents(cid).some(function(o){ return ppAvg(k, cid, o.id, sem) !== null; })) v = 0;
     return v;
@@ -2954,7 +2983,7 @@ function paperFrD(t){ return new Date(t + 'T12:00:00').toLocaleDateString('fr-FR
   /* ----- Liste des PP et bulletins (MasterLog) : deux boutons, PP et BULLETIN, classes par niveau ----- */
   var ppHubOn = false, ppHubMode = 'pp', ppHubCid = null;
   window.ppOpenHub = function(){ ppHubOn = true; ppListOn = false; ppCid = null; ppHubCid = null; go('ae', { target: 'pp' }); };
-  window.ppHubBack = function(){ ppHubOn = false; ppHubCid = null; ppCid = null; go('ae', { target: null }); };
+  window.ppHubBack = function(){ ppHubOn = false; ppHubCid = null; ppCid = null; go('ae', { target: 'aepp' }); };
   window.ppHubSetMode = function(m){ ppHubMode = m; ppHubCid = null; ppCid = null; render(); };
   window.ppHubToList = function(){ ppHubOn = false; ppHubCid = null; ppListOn = true; render(); };
   window.ppHubOpen = function(cid){
@@ -2963,6 +2992,7 @@ function paperFrD(t){ return new Date(t + 'T12:00:00').toLocaleDateString('fr-FR
   };
   window.ppHubPdf = function(cid){ ppCid = cid; window.ppBulletinPdf(); };
   function renderPPHub(){
+    if (!ppIsMaster()) return renderPPPublicList();
     var an = anneeVue();
     var cls = (db.classes || []).filter(function(c){ return c.annee === an; });
     var cnt = {};
@@ -2972,7 +3002,7 @@ function paperFrD(t){ return new Date(t + 'T12:00:00').toLocaleDateString('fr-FR
       if (cur) return ppHubMode === 'bul' ? ppBulletinHtml(cur) : ppClassHtml(cur);
       ppHubCid = null;
     }
-    var top = '<div class="row no-print"><button class="s" onclick="ppHubBack()">← Les AE</button> ' +
+    var top = '<div class="row no-print"><button class="s" onclick="ppHubBack()">← Retour</button> <button class="s" onclick="aeBack()">✖ Fermer</button> ' +
       '<button class="' + (ppHubMode === 'pp' ? 'hb' : 's') + '" onclick="ppHubSetMode(\'pp\')">📋 PP</button> ' +
       '<button class="' + (ppHubMode === 'bul' ? 'hb' : 's') + '" onclick="ppHubSetMode(\'bul\')">🧾 BULLETIN</button> ' +
       '<button class="s" onclick="ppHubToList()">👥 Liste des PP</button></div>';
@@ -3155,6 +3185,14 @@ function paperFrD(t){ return new Date(t + 'T12:00:00').toLocaleDateString('fr-FR
   }
   /* Accès des PP visible uniquement par le MasterLog (dans Les AE) */
   /* ----- Blocage des téléchargements de bulletins (réglé par le MasterLog) ----- */
+  /* Consultation des bulletins (œil) : bloquable par le MasterLog pour les PP */
+  function ppCanSeeBul(){
+    if (!me) return false;
+    if (me.role === 'master' || me.role === 'de' || me.role === 'cens' || me.id === 'de' || me.id === 'cens') return true;
+    return !(db.bulBlock && db.bulBlock.voir);
+  }
+  /* Téléchargement des bulletins : MasterLog, Directeur et Censeur seulement (les PP voient mais ne téléchargent pas) */
+  function ppCanDl(){ return !!me && (me.role === 'master' || me.role === 'de' || me.role === 'cens' || me.id === 'de' || me.id === 'cens'); }
   function bulBlocked(kind){ return !isMaster() && !!(db.bulBlock && db.bulBlock[kind]); }
   window.bulBlockSet = function(kind, v){
     if (!isMaster()) return;
@@ -3164,10 +3202,11 @@ function paperFrD(t){ return new Date(t + 'T12:00:00').toLocaleDateString('fr-FR
   };
   function bulBlockCardHtml(){
     var b = db.bulBlock || {};
-    return '<div class="card" style="margin-top:12px"><h2>🔒 Téléchargements des PP</h2>' +
-      '<p class="mu">Réglage du MasterLog. Une case cochée empêche les PP de télécharger les bulletins.</p>' +
+    return '<div class="card" style="margin-top:12px"><h2>🔒 Téléchargements des bulletins</h2>' +
+      '<p class="mu">Réglage du MasterLog. Une case cochée empêche le Directeur, le Censeur et les PP de télécharger les bulletins.</p>' +
       '<label style="display:flex;gap:8px;align-items:center;margin:6px 0"><input type="checkbox" ' + (b.bloc ? 'checked ' : '') + 'onchange="bulBlockSet(\'bloc\',this.checked)"> Bloquer le téléchargement de bulletin par bloc</label>' +
       '<label style="display:flex;gap:8px;align-items:center;margin:6px 0"><input type="checkbox" ' + (b.indiv ? 'checked ' : '') + 'onchange="bulBlockSet(\'indiv\',this.checked)"> Bloquer le téléchargement de bulletin individuel</label>' +
+      '<label style="display:flex;gap:8px;align-items:center;margin:6px 0"><input type="checkbox" ' + (b.voir ? 'checked ' : '') + 'onchange="bulBlockSet(\'voir\',this.checked)"> Bloquer le téléchargement de bulletin voiriduel</label>' +
       '<label style="display:flex;gap:8px;align-items:center;margin:6px 0"><input type="checkbox" ' + (b.tab ? 'checked ' : '') + 'onchange="bulBlockSet(\'tab\',this.checked)"> Bloquer le téléchargement des tableaux (semestres et bilan annuel)</label></div>';
   }
   function ppAccessAdminHtml(){
@@ -3184,7 +3223,8 @@ function paperFrD(t){ return new Date(t + 'T12:00:00').toLocaleDateString('fr-FR
       '<div class="wrap"><table><tr><th>Classe</th><th>Identifiant</th><th>Mot de passe</th><th></th></tr>' + body + '</table></div></div>';
   }
   function renderPP(a){
-    var back = '<div class="row"><button class="s" onclick="go(\'ae\',{target:null})">← Les AE</button></div>';
+    var back = '<div class="row"><button class="s" onclick="go(\'ae\',{target:\'aepp\'})">← Retour</button> <button class="s" onclick="aeBack()">✖ Fermer</button></div>';
+    if (!ppIsMaster() && !ppCid) return a.innerHTML = renderPPPublicList();
     if (ppListOn) return a.innerHTML = renderPPList();
     if (ppHubOn) return a.innerHTML = renderPPHub();
     var an, cls = [], cnt = {}, sg = {};
@@ -3200,6 +3240,7 @@ function paperFrD(t){ return new Date(t + 'T12:00:00').toLocaleDateString('fr-FR
         ppReadOnly = !ppIsMaster() && !ppUnlocked[cur.id] && !!ppAeView && ppAeCanSee(ppAeView, cur.id);
         a.innerHTML = ppAccessOk(cur) ? (ppBulletinOn ? ppBulletinHtml(cur) : ppClassHtml(cur)) : ppLockHtml(cur);
         if (ppReadOnly) ppMakeReadOnly(a);
+        if (!ppCanSeeBul()) a.querySelectorAll('button').forEach(function(b){ if (/ppBulletinOpen/.test(b.getAttribute('onclick') || '')) b.remove(); });
         return;
       }
       ppCid = null;
@@ -3292,7 +3333,7 @@ function paperFrD(t){ return new Date(t + 'T12:00:00').toLocaleDateString('fr-FR
     }).join(' ') + '</div>';
   }
   function renderOne(a, t){
-    var back = '<div class="row"><button class="s" onclick="go(\'ae\',{target:null})">← Les AE</button>' +
+    var back = '<div class="row"><button class="s" onclick="go(\'ae\',{target:\'aepp\'})">← Retour</button> <button class="s" onclick="aeBack()">✖ Fermer</button>' +
                (isMaster() ? '' : '') + '</div>';
     if (!isStaffAE() && !unlocked[t.id]) {
       var body = !t.pass
@@ -3875,8 +3916,8 @@ function paperFrD(t){ return new Date(t + 'T12:00:00').toLocaleDateString('fr-FR
     var nav = document.querySelector('#home .hside nav');
     if (!nav || nav.querySelector('#bae')) return;
     var b = document.createElement('button');
-    b.id = 'bae'; b.className = 'hb'; b.textContent = '📚 Les AE';
-    b.onclick = function(){ go('ae'); };
+    b.id = 'bae'; b.className = 'hb'; b.textContent = '📚 Les AE et PP';
+    b.onclick = function(){ go('ae', { target: 'aepp' }); };
     var alt = nav.querySelector('button.hb.alt');
     nav.insertBefore(b, alt || null);
   }
@@ -3884,8 +3925,8 @@ function paperFrD(t){ return new Date(t + 'T12:00:00').toLocaleDateString('fr-FR
     var lo = Array.from(document.querySelectorAll('header button')).find(function(x){ return x.getAttribute('onclick') === 'logout()'; });
     if (!lo || lo.parentNode.querySelector('#baeh')) return;
     var b = document.createElement('button');
-    b.id = 'baeh'; b.className = 's'; b.textContent = '📚 Les AE';
-    b.onclick = function(){ go('ae'); };
+    b.id = 'baeh'; b.className = 's'; b.textContent = '📚 Les AE et PP';
+    b.onclick = function(){ go('ae', { target: 'aepp' }); };
     lo.parentNode.insertBefore(b, lo);
   }
 
@@ -4546,6 +4587,16 @@ function paperFrD(t){ return new Date(t + 'T12:00:00').toLocaleDateString('fr-FR
       }
     } catch (e) {}
   }
+  /* Marqueur d'absence sur un devoir : « Malade » ou « Absent » à la place d'une note (le devoir n'est pas compté comme 0) */
+  function espMarker(x){
+    var u = espNrm(x);
+    if (u === 'MALADE' || u === 'MALAD' || u === 'MAL' || u === 'M') return 'Malade';
+    if (u === 'ABSENT' || u === 'ABS' || u === 'A') return 'Absent';
+    if (u === 'QUITTE' || u === 'QUITTER' || u === 'Q') return 'Quitté';
+    if (u === 'TRANSFERE' || u === 'TRANSFERT' || u === 'T') return 'Transféré';
+    if (u === 'REORIENTE' || u === 'REORIENTATION' || u === 'R') return 'Réorienté';
+    return null;
+  }
   window.espSetNote = function(cid, sid, f, el, sem){
     if (espGuard()) return;
     if (!espCur) return;
@@ -4555,6 +4606,8 @@ function paperFrD(t){ return new Date(t + 'T12:00:00').toLocaleDateString('fr-FR
     var raw = String(el.value).trim().replace(',', '.');
     if (raw === '') { r[f] = ''; }
     else {
+      var mk = (f === 'd1' || f === 'd2') ? espMarker(raw) : null;
+      if (mk) { r[f] = mk; } else {
       var n = espNum(raw);
       if (n !== null && (n < 0 || n > 20)) {
         espAlertNoteHors(n);
@@ -4567,6 +4620,7 @@ function paperFrD(t){ return new Date(t + 'T12:00:00').toLocaleDateString('fr-FR
         return;
       }
       r[f] = n;
+      }
     }
     try { save(); } catch (e) {}
     var c = espCalc(r, N.coef);
@@ -4584,6 +4638,50 @@ function paperFrD(t){ return new Date(t + 'T12:00:00').toLocaleDateString('fr-FR
     if (sem === 3) { if (!N.apBil) N.apBil = {}; N.apBil[sid] = txt; }
     else { var rows = espRowsOf(N, sem); var r = rows[sid] || (rows[sid] = {}); r.ap = txt; }
     try { save(); } catch (e) {}
+  };
+  /* ----- Bouton Dispensé dans l'espace professeur : cocher les élèves dispensés de sa matière dans sa classe ----- */
+  var espDispCid = null;
+  window.espDispToggle = function(cid){ espDispCid = espDispCid === cid ? null : cid; render(); };
+  function espMyAeId(){
+    var k = espCur && espCur.key;
+    var x = aes().find(function(a){ return (a.profs || []).some(function(p){ return espKey(p.nom, p.prenoms) === k; }); });
+    return x ? x.id : null;
+  }
+  /* Bouton Dispensé visible tout en haut du carnet de notes du professeur, dès l'ouverture de la classe */
+  function espDispBlock(c){
+    var open = espDispCid === c.id;
+    return '<div class="row" style="margin:8px 0"><button class="' + (open ? 'hb' : '') + '" style="font-size:16px;font-weight:700;padding:10px 16px" onclick="espDispToggle(\'' + c.id + '\')">🚫 Dispensé</button></div>' +
+      (open ? espDispHtml(c) : '');
+  }
+  function espDispHtml(c){
+    var aeId = espMyAeId();
+    if (!aeId) return '<p class="mu">Ton AE est introuvable : la dispense ne peut pas être enregistrée.</p>';
+    var studs = espStudents(c.id);
+    var ex = (db.ppExempt || {})[c.id] || {};
+    var list = studs.map(function(st, i){
+      var on = !!(ex[st.id] && ex[st.id][aeId]);
+      return '<label style="display:flex;gap:8px;align-items:center;padding:5px 0"><input type="checkbox" ' + (on ? 'checked ' : '') +
+        'onchange="espDispSet(\'' + c.id + '\',\'' + st.id + '\',this.checked)"> ' + (i + 1) + '. ' + esc(st.name || '') + '</label>';
+    }).join('');
+    return '<div class="card" style="margin:10px 0"><h3 style="margin:0 0 4px">🚫 Élèves dispensés · ' + esc(espSubjName()) + '</h3>' +
+      '<p class="mu" style="margin:0 0 6px">Coche l’élève qui ne fait pas ta matière. Sa matière n’est pas comptée dans sa moyenne.</p>' +
+      (list || '<p class="mu">Aucun élève dans cette classe.</p>') + '</div>';
+  }
+  window.espDispSet = function(cid, sid, on){
+    if (espGuard()) return;
+    var aeId = espMyAeId();
+    if (!aeId) return;
+    db.ppExempt = db.ppExempt || {};
+    db.ppExempt[cid] = db.ppExempt[cid] || {};
+    if (on) {
+      db.ppExempt[cid][sid] = db.ppExempt[cid][sid] || {};
+      db.ppExempt[cid][sid][aeId] = true;
+    } else if (db.ppExempt[cid][sid]) {
+      delete db.ppExempt[cid][sid][aeId];
+      if (!Object.keys(db.ppExempt[cid][sid]).length) delete db.ppExempt[cid][sid];
+    }
+    try { save(); } catch (e) {}
+    render();
   };
   window.espSetCoef = function(cid, v){
     if (espGuard()) return;
@@ -4682,7 +4780,7 @@ function paperFrD(t){ return new Date(t + 'T12:00:00').toLocaleDateString('fr-FR
     var sem = espSemChoice;
     var tab = function(n, label){ return '<button class="' + (sem === n ? 'hb' : 's') + '" onclick="espSem(' + n + ')">' + label + '</button> '; };
     var h = '<div class="row"><button class="s" onclick="espBackClasses()">← Mes classes</button></div>' +
-      '<h3 style="margin:8px 0">📘 ' + esc(c.name || '?') + ' · ' + esc(c.annee || '') + ' · ' + esc(pn(c.owner, c.promo || 'A')) + '</h3>' + espSubjTabsHtml() +
+      '<h3 style="margin:8px 0">📘 ' + esc(c.name || '?') + ' · ' + esc(c.annee || '') + ' · ' + esc(pn(c.owner, c.promo || 'A')) + '</h3>' + espDispBlock(c) + espSubjTabsHtml() +
       '<div class="row"><label>Coefficient de la classe : <input type="number" min="0" step="0.5" value="' + N.coef + '" style="width:90px;height:34px" ' +
       'onchange="espSetCoef(\'' + c.id + '\',this.value)"></label></div>' +
       '<div class="row">' + tab(1, '1er Semestre') + tab(2, '2ème Semestre') + '</div>';
@@ -4690,10 +4788,16 @@ function paperFrD(t){ return new Date(t + 'T12:00:00').toLocaleDateString('fr-FR
     var studs = espStudents(c.id);
     var inp = function(sid, f, r){
       var val = (r[f] === '' || r[f] === undefined || r[f] === null) ? '' : r[f];
-      return '<td><input type="number" min="0" max="20" step="0.25" value="' + val + '" style="width:64px;height:34px" ' +
+      var isDev = (f === 'd1' || f === 'd2');
+      return '<td><input type="' + (isDev ? 'text' : 'number') + '" ' + (isDev ? '' : 'min="0" max="20" step="0.25" ') + 'value="' + val + '" placeholder="' + (isDev ? 'note, Malade, Absent, Quitté…' : '') + '" style="width:' + (isDev ? '96px' : '64px') + ';height:34px" ' +
         'onchange="espSetNote(\'' + c.id + '\',\'' + sid + '\',\'' + f + '\',this,' + sem + ')"></td>';
     };
-    var mcOf = function(st){ return espCalc(rows[st.id] || {}, N.coef).mc; };
+    /* Élève dispensé de cette matière (case cochée) : ligne en bleu, exclu des moyennes, rangs et synthèse */
+    var dispOf = function(st){
+      var a = espMyAeId();
+      return !!(a && (db.ppExempt || {})[c.id] && db.ppExempt[c.id][st.id] && db.ppExempt[c.id][st.id][a]);
+    };
+    var mcOf = function(st){ return dispOf(st) ? null : espCalc(rows[st.id] || {}, N.coef).mc; };
     var list = espOrdered(studs, mcOf);
     var rk = espRankMap(studs, mcOf);
     var num = {}; studs.forEach(function(st, i){ num[st.id] = i + 1; });
@@ -4701,17 +4805,17 @@ function paperFrD(t){ return new Date(t + 'T12:00:00').toLocaleDateString('fr-FR
     list.forEach(function(st){
       var r = rows[st.id] || {};
       var cal = espCalc(r, N.coef);
-      h += '<tr><td>' + num[st.id] + '</td><td>' + ppEducInput(c, st) + '</td><td>' + esc(st.name || '') + '</td>' +
+      h += '<tr' + (dispOf(st) ? ' style="background:#dbeafe"' : '') + '><td>' + num[st.id] + '</td><td>' + ppEducInput(c, st) + '</td><td>' + esc(st.name || '') + '</td>' +
         inp(st.id, 'i1', r) + inp(st.id, 'i2', r) + inp(st.id, 'i3', r) + inp(st.id, 'i4', r) +
         '<td id="mi_' + st.id + '">' + espFmt(cal.mi) + '</td>' +
         inp(st.id, 'd1', r) + inp(st.id, 'd2', r) +
         '<td id="mn_' + st.id + '">' + espFmt(cal.mn) + '</td>' +
         '<td id="mc_' + st.id + '">' + espFmt(cal.mc) + '</td>' +
-        '<td id="rk_' + st.id + '">' + rk[st.id] + '</td>' +
-        '<td id="ap_' + st.id + '">' + espAppr(cal.mc) + '</td></tr>';
+        '<td id="rk_' + st.id + '">' + (dispOf(st) ? '—' : rk[st.id]) + '</td>' +
+        '<td id="ap_' + st.id + '">' + (dispOf(st) ? '<b style="color:#1d4ed8">Dispensé</b>' : espAppr(cal.mc)) + '</td></tr>';
     });
     if (!studs.length) h += '<tr><td colspan="14" class="mu">Aucun élève dans cette classe.</td></tr>';
-    return h + '</table></div>' + espSummaryHtml(studs, function(st){ return espCalc(rows[st.id] || {}, N.coef).mc; });
+    return h + '</table></div>' + espSummaryHtml(studs.filter(function(st){ return !dispOf(st); }), mcOf);
   }
   /* ----- Export des tableaux en PDF et Excel (même contenu que le tableau affiché) ----- */
   function espTableData(c){
@@ -4868,6 +4972,36 @@ function paperFrD(t){ return new Date(t + 'T12:00:00').toLocaleDateString('fr-FR
     ref.parentNode.insertBefore(b, ref);
   }
   /* ----- MasterLog : un seul bouton « AE-PP-Prf-Bult » regroupe AE, PP, bulletins et professeurs ----- */
+  /* Les PP : liste disponible pour tous ; chaque PP est un bouton qui demande le code d'accès de sa classe */
+  function renderPPPublicList(){
+    var list = ppList().slice().sort(function(x, y){ return String(x.nom || '').localeCompare(String(y.nom || ''), 'fr', { sensitivity: 'base' }); });
+    var rows = list.map(function(p){
+      var c = (db.classes || []).find(function(x){ return x.id === p.cid; });
+      return '<div class="card" style="margin:6px 0;padding:8px 10px;display:flex;flex-wrap:wrap;gap:6px;align-items:center;justify-content:space-between">' +
+        '<span><b>' + esc((p.nom || '') + ' ' + (p.prenoms || '')) + '</b> <span class="mu">· ' + esc(c ? c.name : '—') + '</span></span>' +
+        '<span style="display:flex;gap:6px;flex-wrap:wrap"><button onclick="ppEnter(\'' + p.id + '\')">📋 Classe</button> ' +
+        (ppCanSeeBul() ? '<button class="s" onclick="ppEnterBul(\'' + p.id + '\')">🧾 Bulletin</button>' : '') + '</span></div>';
+    }).join('');
+    if (!list.length) rows = '<p class="mu">Aucun PP enregistré pour le moment.</p>';
+    return '<main><div class="row"><button class="s" onclick="ppHubBack()">← Retour</button> <button class="s" onclick="aeBack()">✖ Fermer</button></div>' +
+      '<div class="card"><h2>📋 Les PP</h2><p class="mu">Touche le nom de ton PP, puis entre le code d’accès de ta classe.</p>' + rows + '</div></main>';
+  }
+  window.ppEnterBul = function(pid){ ppEnter(pid, true); };
+  window.ppEnter = function(pid, bul){
+    if (bul && !ppCanSeeBul()) return alert('Le MasterLog a bloqué la consultation des bulletins pour les PP.');
+    var p = ppList().find(function(x){ return x.id === pid; });
+    if (!p) return;
+    var c = p.cid ? (db.classes || []).find(function(x){ return x.id === p.cid; }) : null;
+    if (!c) return alert('Aucune classe n’est liée à ce PP. Demande au MasterLog.');
+    var acc = ppAccs()[c.id];
+    if (!acc) return alert('Le code d’accès de cette classe n’est pas encore créé. Demande au MasterLog.');
+    var code = prompt('Code d’accès de la classe ' + c.name + ' :');
+    if (code === null) return;
+    if (String(code).trim() !== String(acc.pass)) return alert('Code incorrect.');
+    ppUnlocked[c.id] = true;
+    ppCid = c.id; ppListOn = false; ppHubOn = false; ppBulletinOn = !!bul; ppBulletinSem = 1; ppBulletinAll = false;
+    render();
+  };
   /* MasterLog : importer les matricules depuis le panneau AE-PP-Prf-Bult, en choisissant la classe puis le fichier */
   window.ppMatPick = function(){
     var an = anneeVue();
@@ -4909,6 +5043,7 @@ function paperFrD(t){ return new Date(t + 'T12:00:00').toLocaleDateString('fr-FR
         '<button id="agr2">📋 Liste des PP et bulletins</button>' +
         '<button id="agr3">🧑‍🏫 Espaces prof</button>' +
         '<button id="agr4">📥 Importer les matricules</button>' +
+        '<button id="agr5">📥 Importer les PP</button>' +
         '</div>' +
         '<div style="text-align:right;margin-top:12px"><button class="s" id="agrx">✕ Fermer</button></div></div>';
       document.body.appendChild(o);
@@ -4917,6 +5052,7 @@ function paperFrD(t){ return new Date(t + 'T12:00:00').toLocaleDateString('fr-FR
       document.getElementById('agr1').onclick = function(){ o.hidden = true; go('ae'); };
       document.getElementById('agr2').onclick = function(){ o.hidden = true; window.ppOpenHub(); };
       document.getElementById('agr4').onclick = function(){ o.hidden = true; window.ppMatPick(); };
+      document.getElementById('agr5').onclick = function(){ o.hidden = true; window.ppOpenList(); };
       document.getElementById('agr3').onclick = function(){ o.hidden = true; espIsMaster = true; espCur = null; espFor = null; espClassId = null; go('espprof'); };
     }
     o.hidden = false;
