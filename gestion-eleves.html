@@ -4056,6 +4056,11 @@ function paperFrD(t){ return new Date(t + 'T12:00:00').toLocaleDateString('fr-FR
     espQuery = String(q || '');
     var box = document.getElementById('espRes'); if (box) box.innerHTML = espResultsHtml();
   };
+  /* Appelé par la synchronisation : la liste se met à jour même si le champ de recherche a le focus */
+  window.espRefreshBox = function(){
+    var box = document.getElementById('espRes');
+    if (box && String(espQuery || '').trim()) box.innerHTML = espResultsHtml();
+  };
   /* Recherche dès la première lettre : chaque mot saisi doit commencer un mot du nom ou des prénoms */
   function espPrefixSearch(q){
     var want = espTokens(q, '').split(' ').filter(Boolean);
@@ -5095,6 +5100,92 @@ function paperFrD(t){ return new Date(t + 'T12:00:00').toLocaleDateString('fr-FR
     return r;
   };
   try { render(); } catch (e) {}
+})();
+</script>
+<script>
+/* Correctif synchronisation : notes, codes professeurs, classes choisies, recherche de professeurs (comptes AE),
+   demandes de libération, cycle/matière et dispenses étaient enregistrés uniquement sur le téléphone qui les créait.
+   Ils sont maintenant envoyés à Firebase et reçus par tous les appareils. */
+(function(){
+  if (typeof syFlat !== 'function' || typeof syApply !== 'function') return;
+  var AE_DEF = [['AE Français','Français'],['AE Anglais','Anglais'],['AE Hist-Géo','Hist-Géo'],['AE Philo','Philosophie'],
+    ['AE Espagnol','Espagnol'],['AE Allemand','Allemand'],['AE Maths','Maths'],['AE SVT','SVT'],
+    ['AE PCT','PCT'],['AE Économie','Économie'],['AE EPS','EPS'],['AE Informatique','Informatique']];
+  var EX = { epass:1, esel:1, esubj:1, ecycle:1, ereq:1, enotes:1, ppex:1, ae:1 };
+  var enc = function(s){ return encodeURIComponent(String(s)); };
+  var dec = function(s){ try { return decodeURIComponent(s); } catch (e) { return s; } };
+  var J = JSON.stringify;
+  function isEmpty(o){ return !o || !Object.keys(o).length; }
+
+  /* Ce que l'on envoie : on ignore les enregistrements « vides » créés automatiquement à l'affichage,
+     pour qu'un téléphone neuf n'écrase jamais les vraies données d'un autre. */
+  var baseFlat = syFlat;
+  syFlat = function(){
+    var f = baseFlat.apply(this, arguments);
+    try {
+      var k;
+      for (k in (db.espPass || {})) if (db.espPass[k]) f['epass/' + enc(k)] = J(db.espPass[k]);
+      for (k in (db.espSel || {})) if ((db.espSel[k] || []).length) f['esel/' + enc(k)] = J(db.espSel[k]);
+      for (k in (db.espSubj || {})) if (db.espSubj[k]) f['esubj/' + enc(k)] = J(db.espSubj[k]);
+      for (k in (db.espCycle || {})) if (db.espCycle[k]) f['ecycle/' + enc(k)] = J(db.espCycle[k]);
+      for (k in (db.espReq || {})) if (db.espReq[k]) f['ereq/' + enc(k)] = J(db.espReq[k]);
+      Object.keys(db.espNotes || {}).forEach(function(key){
+        var byC = db.espNotes[key] || {};
+        Object.keys(byC).forEach(function(cid){
+          var N = byC[cid];
+          if (!N) return;
+          var s = J(N);
+          if (s === '{"coef":1,"rows":{},"rows2":{}}' || s === '{"coef":1,"rows":{}}') return;
+          f['enotes/' + enc(key) + '/' + enc(cid)] = s;
+        });
+      });
+      Object.keys(db.ppExempt || {}).forEach(function(cid){ if (!isEmpty(db.ppExempt[cid])) f['ppex/' + enc(cid)] = J(db.ppExempt[cid]); });
+      /* Un AE par défaut jamais modifié (vide, sans code) n'est pas envoyé, sauf s'il a déjà été synchronisé
+         (ex. liste vidée) : sinon les listes des autres téléphones seraient écrasées par des AE vides. */
+      (db.aeAccts || []).forEach(function(a){
+        if (!a || !a.id) return;
+        var key = 'ae/' + enc(a.id);
+        var pristine = !a.pass && isEmpty(a.profs) && /^ae\d+$/.test(a.id);
+        if (!pristine || (sy && sy.meta && (key in sy.meta))) f[key] = J(a);
+      });
+    } catch (e) {}
+    return f;
+  };
+
+  /* Ce que l'on reçoit */
+  var baseApply = syApply;
+  syApply = function(k, s){
+    var p = k.split('/'), t = p[0];
+    if (!EX[t]) return baseApply.apply(this, arguments);
+    var v = null;
+    if (s !== null) { try { v = JSON.parse(s); } catch (e) { return; } }
+    function put(name){
+      var m = db[name] = db[name] || {}, key = dec(p[1]);
+      if (v === null) delete m[key]; else m[key] = v;
+    }
+    if (t === 'epass') put('espPass');
+    else if (t === 'esel') put('espSel');
+    else if (t === 'esubj') put('espSubj');
+    else if (t === 'ecycle') put('espCycle');
+    else if (t === 'ereq') put('espReq');
+    else if (t === 'ppex') put('ppExempt');
+    else if (t === 'enotes') {
+      var key = dec(p[1]), cid = dec(p[2]), m = db.espNotes = db.espNotes || {};
+      if (v === null) { if (m[key]) { delete m[key][cid]; if (isEmpty(m[key])) delete m[key]; } }
+      else (m[key] = m[key] || {})[cid] = v;
+    }
+    else if (t === 'ae') {
+      if (!db.aeAccts) db.aeAccts = AE_DEF.map(function(d, i){ return { id: 'ae' + (i + 1), name: d[0], mat: d[1], pass: '', profs: [] }; });
+      var id = dec(p[1]), a = db.aeAccts, i = a.findIndex(function(x){ return x.id === id; });
+      if (v === null) { if (i >= 0) a.splice(i, 1); }
+      else if (i >= 0) a[i] = v; else a.push(v);
+      try { if (window.espRefreshBox) window.espRefreshBox(); } catch (e) {}
+    }
+  };
+
+  /* Force un nouvel envoi complet des nouvelles données au premier lancement de cette version */
+  try { if (sy && sy.init) { sy.fullAt = 0; sySave(); } } catch (e) {}
+  try { setTimeout(function(){ if (syOn()) { syDiff(); sySave(); syRun(); } }, 1500); } catch (e) {}
 })();
 </script>
 </body>
