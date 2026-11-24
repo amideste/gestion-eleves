@@ -1600,7 +1600,7 @@ function paperFrD(t){ return new Date(t + 'T12:00:00').toLocaleDateString('fr-FR
   /* Export Word (.doc) du modèle « POINT DES ÉLÈVES ABSENTÉISTES » : mêmes colonnes que le PDF */
   window.paperWord = function(body, rg, label){
     var E = function(x){ return String(x == null ? '' : x).replace(/&/g, '&amp;').replace(/</g, '&lt;').replace(/>/g, '&gt;'); };
-    if (!body.length) body = [['CEG1 ALLADA', 'Allada', 'Aucun absent sur cette période', '', '', '', '', '', '', '', '']];
+    if (!body.length) body = [[etabNom(), 'Allada', 'Aucun absent sur cette période', '', '', '', '', '', '', '', '']];
     var th = window.PAPER_H.map(function(t){ return '<th style="background:#DEE8F7;border:1px solid #3C5A8C;padding:3px;font-size:9pt;text-align:center">' + E(t) + '</th>'; }).join('');
     var tr = body.map(function(r){ return '<tr>' + r.map(function(v){ return '<td style="border:1px solid #96A5C3;padding:3px;font-size:9pt">' + E(v) + '</td>'; }).join('') + '</tr>'; }).join('');
     var html = '<html xmlns:o="urn:schemas-microsoft-com:office:word" xmlns="http://www.w3.org/TR/REC-html40"><head><meta charset="utf-8"><title>Absents</title>' +
@@ -1634,7 +1634,7 @@ function paperFrD(t){ return new Date(t + 'T12:00:00').toLocaleDateString('fr-FR
     doc.text(TT, W / 2, 47, { align: 'center' }); doc.setLineWidth(0.4); doc.line(W / 2 - TW / 2, 48, W / 2 + TW / 2, 48);
     doc.setFont('helvetica', 'normal'); doc.setFontSize(9); doc.setTextColor(101, 108, 134);
     doc.text('CEG1 ALLADA · Commune : Allada · du ' + paperFrD(rg[0]) + (rg[0] !== rg[1] ? ' au ' + paperFrD(rg[1]) : ''), W / 2, 53, { align: 'center' });
-    if (!body.length) body = [['CEG1 ALLADA', 'Allada', 'Aucun absent sur cette période', '', '', '', '', '', '', '', '']];
+    if (!body.length) body = [[etabNom(), 'Allada', 'Aucun absent sur cette période', '', '', '', '', '', '', '', '']];
     doc.autoTable({
       startY: 58, head: [window.PAPER_H], body: body,
       margin: { left: 10, right: 10, top: 14, bottom: 14 },
@@ -1710,7 +1710,7 @@ function paperFrD(t){ return new Date(t + 'T12:00:00').toLocaleDateString('fr-FR
     });
     var F = Object.values(R).filter(function(o){ return o.dj >= st.min; }), mois = moisFull(domMonth(rg)), rows = [];
     F.forEach(function(o){ if (!o.pj) return; var mt = Object.keys(o.mot);
-      rows.push({ o: o, cells: ['CEG1 ALLADA', 'Allada', o.s.name, o.s.sex === 'M' ? 'M' : 'F', dobFr(o.s.dob), o.c.name, mois, String(o.pj), o.s.phone || '', o.pn === 0 ? 'Oui' : 'Sans motif', mt.length ? mt.join(', ') : 'Non'] }); });
+      rows.push({ o: o, cells: [etabNom(), 'Allada', o.s.name, o.s.sex === 'M' ? 'M' : 'F', dobFr(o.s.dob), o.c.name, mois, String(o.pj), o.s.phone || '', o.pn === 0 ? 'Oui' : 'Sans motif', mt.length ? mt.join(', ') : 'Non'] }); });
     rows.sort(function(x, y){ return clsCmp(x.o.c.name, y.o.c.name) || clsCmp(x.o.s.name, y.o.s.name); });
     return { a: a, e: e, rg: rg, F: F, rows: rows };
   }
@@ -1729,7 +1729,7 @@ function paperFrD(t){ return new Date(t + 'T12:00:00').toLocaleDateString('fr-FR
   function paperRow(x, rg){
     var mo = motif(x.d, x.s.id, x.r), ok = mo === 'Malade' || mo === 'Permission';
     return [
-      'CEG1 ALLADA', 'Allada', x.s.name, x.s.sex === 'M' ? 'M' : 'F', dobFr(x.s.dob),
+      etabNom(), 'Allada', x.s.name, x.s.sex === 'M' ? 'M' : 'F', dobFr(x.s.dob),
       x.c.name, moisFull(domMonth(rg || [x.d, x.d])), String((x.r.m ? 1 : 0) + (x.r.s ? 1 : 0)),
       x.s.phone || '', ok ? 'Oui' : 'Sans motif',
       ok ? mo : 'Non'
@@ -2416,14 +2416,14 @@ function paperFrD(t){ return new Date(t + 'T12:00:00').toLocaleDateString('fr-FR
   }
   /* ----- BULLETINS : un bulletin par élève pour le 1er semestre et pour le 2ème semestre (le 2ème affiche aussi l'annuel) ----- */
   /* Timbre des bulletins : en haut à gauche l'en-tête officiel, en haut à droite l'établissement et l'année scolaire */
-  var BUL_ETAB = 'CEG1 ALLADA', BUL_ANNEE = 'Année Scolaire 2026-2027';
+  /* Collège et année : voir window.etabNom() / window.etabAnneeLabel() (réglage « Collège & année ») */
   var BUL_TIMBRE_A = ['MINISTÈRE DES ENSEIGNEMENTS SECONDAIRE,', 'TECHNIQUE ET DE LA FORMATION PROFESSIONNELLE'];
-  var BUL_TIMBRE_B = ['RÉPUBLIQUE DU BÉNIN', 'DÉPARTEMENT DE L\'ATLANTIQUE', 'CEG1 ALLADA'];
+  var BUL_TIMBRE_B_OF = function(){ return ['RÉPUBLIQUE DU BÉNIN', 'DÉPARTEMENT DE L\'ATLANTIQUE', etabNom()]; };
   function ppTimbreHtml(){
     return '<div class="bul-timbre"><div class="bt-left">' + BUL_TIMBRE_A.map(esc).join('<br>') +
       '<div class="bt-flag"><i></i><i></i><i></i></div>' +
-      '<b>' + esc(BUL_TIMBRE_B[0]) + '</b><br>' + BUL_TIMBRE_B.slice(1).map(esc).join('<br>') + '</div>' +
-      '<div class="bt-right"><strong>' + esc(BUL_ETAB) + '</strong><span>' + esc(BUL_ANNEE) + '</span></div></div>';
+      '<b>' + esc(BUL_TIMBRE_B_OF()[0]) + '</b><br>' + BUL_TIMBRE_B_OF().slice(1).map(esc).join('<br>') + '</div>' +
+      '<div class="bt-right"><strong>' + esc(etabNom()) + '</strong><span>' + esc(etabAnneeLabel()) + '</span></div></div>';
   }
   /* Matières affichées sur le bulletin : celles qui ont un professeur dans la classe */
   function ppBulCols(c){
@@ -2689,14 +2689,14 @@ function paperFrD(t){ return new Date(t + 'T12:00:00').toLocaleDateString('fr-FR
     doc.setFillColor(0, 135, 81); doc.rect(cx - 12, 11.2 + DY, 8, 1, 'F');
     doc.setFillColor(252, 209, 22); doc.rect(cx - 4, 11.2 + DY, 8, 1, 'F');
     doc.setFillColor(232, 17, 45); doc.rect(cx + 4, 11.2 + DY, 8, 1, 'F');
-    doc.setFont('helvetica', 'bold'); doc.text(BUL_TIMBRE_B[0], cx, ty[2], { align: 'center' });
+    doc.setFont('helvetica', 'bold'); doc.text(BUL_TIMBRE_B_OF()[0], cx, ty[2], { align: 'center' });
     doc.setFont('helvetica', 'normal');
-    for (var q = 1; q < BUL_TIMBRE_B.length; q++) doc.text(BUL_TIMBRE_B[q], cx, ty[2 + q], { align: 'center' });
+    for (var q = 1; q < BUL_TIMBRE_B_OF().length; q++) doc.text(BUL_TIMBRE_B_OF()[q], cx, ty[2 + q], { align: 'center' });
     /* Établissement et année scolaire à droite */
     doc.setFont('helvetica', 'bold'); doc.setFontSize(18); doc.setTextColor(31, 58, 104);
-    doc.text(BUL_ETAB, W - M, 15 + DY, { align: 'right' });
+    doc.text(etabNom(), W - M, 15 + DY, { align: 'right' });
     doc.setFontSize(11.5); doc.setTextColor(29, 36, 51);
-    doc.text(BUL_ANNEE, W - M, 22 + DY, { align: 'right' });
+    doc.text(etabAnneeLabel(), W - M, 22 + DY, { align: 'right' });
     doc.setFillColor(31, 58, 104); doc.rect(M, 10 + T + DY, W - 2 * M, 20, 'F');
     doc.setFont('helvetica', 'bold'); doc.setFontSize(17); doc.setTextColor(255, 255, 255);
     doc.text('BULLETIN DE NOTES', W / 2, 20 + T + DY, { align: 'center' });
@@ -3271,7 +3271,7 @@ function paperFrD(t){ return new Date(t + 'T12:00:00').toLocaleDateString('fr-FR
       body + '</div></main>';
   }
   /* Provenance affichée : les professeurs du collège (sans ext) = CEG1 ALLADA */
-  function provOf(p){ return p.ext ? (p.prov || '') : 'CEG1 ALLADA'; }
+  function provOf(p){ return p.ext ? (p.prov || '') : etabNom(); }
   /* Professeurs du collège d'abord, puis ceux ajoutés par les AE (toujours en bas) */
   function orderedProfs(t){
     var L = t.profs || [];
@@ -3355,7 +3355,7 @@ function paperFrD(t){ return new Date(t + 'T12:00:00').toLocaleDateString('fr-FR
       var inp = function(f){ return '<td><input id="ed_' + f + '" value="' + esc(p[f] || '') + '" style="width:110px;height:34px;padding:2px 6px;font-size:14px"></td>'; };
       if (isMaster() && aeEditId === p.id) {
         return '<tr><td>' + (pi + 1) + '</td>' + inp('matricule') + inp('nom') + inp('prenoms') + inp('mat') + inp('anpe') + inp('tel') +
-          '<td>' + (p.ext ? '<input id="ed_prov" value="' + esc(p.prov || '') + '" style="width:110px;height:34px;padding:2px 6px;font-size:14px">' : 'CEG1 ALLADA') + '</td>' +
+          '<td>' + (p.ext ? '<input id="ed_prov" value="' + esc(p.prov || '') + '" style="width:110px;height:34px;padding:2px 6px;font-size:14px">' : etabNom()) + '</td>' +
           '<td><button onclick="aeSaveProf(\'' + t.id + '\',\'' + p.id + '\')">💾</button> <button class="s" onclick="aeEditStop()">✖</button></td></tr>';
       }
       return '<tr><td>' + (pi + 1) + '</td><td>' + esc(p.matricule) + '</td><td>' + esc(p.nom) + '</td><td>' + esc(p.prenoms) + '</td><td>' + esc(p.mat) + '</td><td>' + esc(p.anpe) + '</td><td>' + esc(p.tel) +
@@ -5111,7 +5111,8 @@ function paperFrD(t){ return new Date(t + 'T12:00:00').toLocaleDateString('fr-FR
   var AE_DEF = [['AE Français','Français'],['AE Anglais','Anglais'],['AE Hist-Géo','Hist-Géo'],['AE Philo','Philosophie'],
     ['AE Espagnol','Espagnol'],['AE Allemand','Allemand'],['AE Maths','Maths'],['AE SVT','SVT'],
     ['AE PCT','PCT'],['AE Économie','Économie'],['AE EPS','EPS'],['AE Informatique','Informatique']];
-  var EX = { epass:1, esel:1, esubj:1, ecycle:1, ereq:1, enotes:1, ppex:1, ae:1 };
+  var EX = { epass:1, esel:1, esubj:1, ecycle:1, ereq:1, enotes:1, ppex:1, ae:1,
+           ppeduc:1, pplist:1, ppcond:1, ppacc:1, bulblock:1, flag:1, etab:1, nm:1, nr:1, nb:1 };
   var enc = function(s){ return encodeURIComponent(String(s)); };
   var dec = function(s){ try { return decodeURIComponent(s); } catch (e) { return s; } };
   var J = JSON.stringify;
@@ -5148,6 +5149,46 @@ function paperFrD(t){ return new Date(t + 'T12:00:00').toLocaleDateString('fr-FR
         var pristine = !a.pass && isEmpty(a.profs) && /^ae\d+$/.test(a.id);
         if (!pristine || (sy && sy.meta && (key in sy.meta))) f[key] = J(a);
       });
+      /* sync v3 : matricules, PP, conduites, codes PP, blocages, drapeaux */
+      Object.keys(db.ppEduc || {}).forEach(function(cid){
+        var byS = db.ppEduc[cid] || {};
+        Object.keys(byS).forEach(function(sid){
+          f['ppeduc/' + enc(cid) + '/' + enc(sid)] = J(String(byS[sid] || ''));
+        });
+      });
+      Object.keys(db.ppCond || {}).forEach(function(cid){
+        var byS = db.ppCond[cid] || {};
+        Object.keys(byS).forEach(function(sid){
+          if (byS[sid]) f['ppcond/' + enc(cid) + '/' + enc(sid)] = J(byS[sid]);
+        });
+      });
+      (db.ppList || []).forEach(function(p){ if (p && p.id) f['pplist/' + enc(p.id)] = J(p); });
+      Object.keys(db.ppAcc || {}).forEach(function(cid){
+        if (db.ppAcc[cid]) f['ppacc/' + enc(cid)] = J(db.ppAcc[cid]);
+      });
+      Object.keys(db.bulBlock || {}).forEach(function(kind){
+        f['bulblock/' + enc(kind)] = J(!!db.bulBlock[kind]);
+      });
+      ['addSGV1', 'sgFnV1', 'hessouV1'].forEach(function(name){
+        if (db[name] !== undefined) f['flag/' + enc(name)] = J(db[name]);
+      });
+      if (db.etab) f['etab'] = J(db.etab);
+      /* v6 : notes découpées par cellule (une clé par élève et par période) : deux saisies simultanées ne s'écrasent plus */
+      Object.keys(db.espNotes || {}).forEach(function(key){
+        var byC = db.espNotes[key] || {};
+        Object.keys(byC).forEach(function(cid){
+          var N = byC[cid]; if (!N) return;
+          var kk = enc(key) + '/' + enc(cid);
+          if (N.coef !== undefined) f['nm/' + kk] = J({ coef: N.coef });
+          var secs = [[1, N.rows], [2, N.rows2]];
+          secs.forEach(function(pair){
+            var R = pair[1] || {};
+            Object.keys(R).forEach(function(sid){ if (R[sid]) f['nr/' + kk + '/' + pair[0] + '/' + enc(sid)] = J(R[sid]); });
+          });
+          var B = N.apBil || {};
+          Object.keys(B).forEach(function(sid){ if (B[sid]) f['nb/' + kk + '/' + enc(sid)] = J(B[sid]); });
+        });
+      });
     } catch (e) {}
     return f;
   };
@@ -5170,9 +5211,7 @@ function paperFrD(t){ return new Date(t + 'T12:00:00').toLocaleDateString('fr-FR
     else if (t === 'ereq') put('espReq');
     else if (t === 'ppex') put('ppExempt');
     else if (t === 'enotes') {
-      var key = dec(p[1]), cid = dec(p[2]), m = db.espNotes = db.espNotes || {};
-      if (v === null) { if (m[key]) { delete m[key][cid]; if (isEmpty(m[key])) delete m[key]; } }
-      else (m[key] = m[key] || {})[cid] = v;
+      /* v6 : ignoré à la réception ; les notes sont lues depuis nm/nr/nb */
     }
     else if (t === 'ae') {
       if (!db.aeAccts) db.aeAccts = AE_DEF.map(function(d, i){ return { id: 'ae' + (i + 1), name: d[0], mat: d[1], pass: '', profs: [] }; });
@@ -5181,11 +5220,102 @@ function paperFrD(t){ return new Date(t + 'T12:00:00').toLocaleDateString('fr-FR
       else if (i >= 0) a[i] = v; else a.push(v);
       try { if (window.espRefreshBox) window.espRefreshBox(); } catch (e) {}
     }
+    else if (t === 'ppeduc' || t === 'ppcond') {
+      var mapName = t === 'ppeduc' ? 'ppEduc' : 'ppCond';
+      var cidX = dec(p[1]), sidX = dec(p[2]), mm = db[mapName] = db[mapName] || {};
+      if (v === null || v === '') { if (mm[cidX]) delete mm[cidX][sidX]; }
+      else (mm[cidX] = mm[cidX] || {})[sidX] = v;
+    }
+    else if (t === 'pplist') {
+      var pid = dec(p[1]), LST = db.ppList = db.ppList || [];
+      var ix = LST.findIndex(function(x){ return x.id === pid; });
+      if (v === null) { if (ix >= 0) LST.splice(ix, 1); }
+      else if (ix >= 0) LST[ix] = v; else LST.push(v);
+    }
+    else if (t === 'ppacc') {
+      var cA = dec(p[1]), mA = db.ppAcc = db.ppAcc || {};
+      if (v === null) delete mA[cA]; else mA[cA] = v;
+    }
+    else if (t === 'bulblock') {
+      var kB = dec(p[1]), mB = db.bulBlock = db.bulBlock || {};
+      if (v === null) delete mB[kB]; else mB[kB] = v;
+    }
+    else if (t === 'flag') {
+      if (v !== null) db[dec(p[1])] = v;
+    }
+    else if (t === 'etab') {
+      if (v !== null) db.etab = v;
+      try { if (window.render) render(); } catch (e) {}
+    }
+    else if (t === 'nm' || t === 'nr' || t === 'nb') {
+      var nKey = dec(p[1]), nCid = dec(p[2]);
+      db.espNotes = db.espNotes || {};
+      db.espNotes[nKey] = db.espNotes[nKey] || {};
+      var NN = db.espNotes[nKey][nCid] = db.espNotes[nKey][nCid] || { coef: 1, rows: {}, rows2: {} };
+      if (!NN.rows) NN.rows = {};
+      if (!NN.rows2) NN.rows2 = {};
+      if (t === 'nm') {
+        if (v && v.coef !== undefined) NN.coef = v.coef;
+      } else if (t === 'nr') {
+        var nSem = Number(p[3]), nSid = dec(p[4]), nRows = nSem === 2 ? NN.rows2 : NN.rows;
+        if (v === null) delete nRows[nSid]; else nRows[nSid] = v;
+      } else {
+        var bSid = dec(p[3]); NN.apBil = NN.apBil || {};
+        if (v === null) delete NN.apBil[bSid]; else NN.apBil[bSid] = v;
+      }
+      try { if (window.render) render(); } catch (e) {}
+    }
+
+    if (['ppeduc','ppcond','pplist','ppacc','bulblock'].indexOf(t) >= 0) {
+      try { if (window.render) render(); } catch (e) {}
+    }
   };
 
   /* Force un nouvel envoi complet des nouvelles données au premier lancement de cette version */
   try { if (sy && sy.init) { sy.fullAt = 0; sySave(); } } catch (e) {}
   try { setTimeout(function(){ if (syOn()) { syDiff(); sySave(); syRun(); } }, 1500); } catch (e) {}
+})();
+</script>
+
+<script>
+/* Collège et année scolaire : réglage unique, synchronisé, utilisé dans les bulletins et les PDF */
+(function(){
+  window.etabNom = function(){ return (db.etab && db.etab.nom) || 'CEG1 ALLADA'; };
+  window.etabAnnee = function(){ return (db.etab && db.etab.annee) || '2026-2027'; };
+  window.etabAnneeLabel = function(){ return 'Année Scolaire ' + window.etabAnnee(); };
+  function canEdit(){
+    var u = (typeof me !== 'undefined') ? me : null;
+    return !!u && (u.role === 'master' || u.role === 'sup' || u.role === 'surv' || u.id === 'cens');
+  }
+  function he(x){ return String(x == null ? '' : x).replace(/[&<>"]/g, function(c){ return {'&':'&amp;','<':'&lt;','>':'&gt;','"':'&quot;'}[c]; }); }
+  window.etabOpen = function(){
+    if (document.getElementById('etabMod')) return;
+    var o = document.createElement('div');
+    o.id = 'etabMod';
+    o.style.cssText = 'position:fixed;inset:0;z-index:70;background:rgba(20,22,40,.5);display:flex;align-items:center;justify-content:center;padding:16px';
+    o.innerHTML = '<div style="background:#fff;color:#111;border-radius:14px;padding:20px;max-width:420px;width:100%">' +
+      '<h3 style="margin:0 0 12px">🏫 Collège et année scolaire</h3>' +
+      '<label style="display:block;margin-bottom:10px">Nom du collège<br><input id="etabN" value="' + he(window.etabNom()) + '" style="width:100%;padding:8px;box-sizing:border-box"></label>' +
+      '<label style="display:block;margin-bottom:14px">Année scolaire (ex. 2026-2027)<br><input id="etabA" value="' + he(window.etabAnnee()) + '" style="width:100%;padding:8px;box-sizing:border-box"></label>' +
+      '<div style="display:flex;gap:8px;justify-content:flex-end"><button onclick="document.getElementById(\'etabMod\').remove()">Annuler</button><button onclick="etabSave()">Enregistrer</button></div></div>';
+    document.body.appendChild(o);
+  };
+  window.etabSave = function(){
+    var n = (document.getElementById('etabN').value || '').trim().slice(0, 120);
+    var a = (document.getElementById('etabA').value || '').trim().slice(0, 30);
+    if (!n || !a) return alert('Renseigne le nom du collège et l\'année scolaire.');
+    db.etab = { nom: n, annee: a };
+    try { save(); } catch (e) {}
+    document.getElementById('etabMod').remove();
+    try { render(); } catch (e) {}
+    alert('Enregistré : ' + n + ' · ' + window.etabAnneeLabel());
+  };
+  var btn = document.createElement('button');
+  btn.textContent = '🏫 Collège & année';
+  btn.style.cssText = 'position:fixed;left:10px;bottom:10px;z-index:50;display:none;padding:8px 12px;border-radius:12px;font-size:13px';
+  btn.onclick = function(){ window.etabOpen(); };
+  document.body.appendChild(btn);
+  setInterval(function(){ btn.style.display = canEdit() ? 'block' : 'none'; }, 800);
 })();
 </script>
 </body>
