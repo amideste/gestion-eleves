@@ -5318,5 +5318,124 @@ function paperFrD(t){ return new Date(t + 'T12:00:00').toLocaleDateString('fr-FR
   setInterval(function(){ btn.style.display = canEdit() ? 'block' : 'none'; }, 800);
 })();
 </script>
+<script id="compte-prof">
+/* COMPTE Prof : le MasterLog gère les comptes Les AE, Prof et PP (réinitialiser, modifier, supprimer, bloquer) */
+(function(){
+  var tab = null, ov = null;
+  function isM(){ return typeof me !== 'undefined' && !!me && me.role === 'master'; }
+  function nrm(x){ return String(x || '').normalize('NFD').replace(/[\u0300-\u036f]/g, '').toUpperCase().replace(/\s+/g, ' ').trim(); }
+  function pkey(p){ return nrm(p.nom) + '|' + nrm(p.prenoms); }
+  function esc(s){ return String(s == null ? '' : s).replace(/[&<>"]/g, function(c){ return { '&': '&amp;', '<': '&lt;', '>': '&gt;', '"': '&quot;' }[c]; }); }
+  function aes(){ return db.aeAccts || []; }
+  function profs(){
+    var seen = {}, l = [];
+    aes().forEach(function(a){ (a.profs || []).forEach(function(p){
+      var pv = nrm(p.prov || '').replace(/[^A-Z0-9]/g, ''); if (pv !== '' && pv !== 'CEG1ALLADA') return;
+      var k = pkey(p); if (seen[k]) return; seen[k] = 1; l.push({ k: k, name: (p.nom || '') + ' ' + (p.prenoms || '') });
+    }); });
+    return l.sort(function(a, b){ return a.name.localeCompare(b.name, 'fr'); });
+  }
+  function profBlocked(k){ return aes().some(function(a){ return (a.profs || []).some(function(p){ return pkey(p) === k && p.blocked; }); }); }
+  function setProfBlocked(k, v){ aes().forEach(function(a){ (a.profs || []).forEach(function(p){ if (pkey(p) === k) { if (v) p.blocked = true; else delete p.blocked; } }); }); }
+  function rows(){
+    if (tab === 'ae') return aes().map(function(a){ return { k: a.id, n: a.name, s: a.pass ? 'Code défini' : 'Pas de code', b: !!a.blocked }; });
+    if (tab === 'prof') return profs().map(function(p){ return { k: p.k, n: p.name, s: (db.espPass || {})[p.k] ? 'Compte actif' : 'Pas de compte', b: profBlocked(p.k) }; });
+    if (tab === 'pp') return (db.classes || []).map(function(c){ var a = (db.ppAcc || {})[c.id]; return { k: c.id, n: 'PP ' + (c.name || c.nom || c.id), s: a ? 'Identifiant : ' + a.id : 'Pas d’accès', b: !!(a && a.blocked) }; });
+    return [];
+  }
+  function paint(){
+    if (!ov) return;
+    var T = { ae: 'Les AE', prof: 'Prof', pp: 'PP' };
+    var h = '<div style="max-width:900px;margin:0 auto;padding:12px"><div class="row" style="justify-content:space-between;margin-bottom:10px"><b style="font-size:18px">🔑 COMPTE Prof</b><button class="s" data-x="close">✕ Fermer</button></div><div class="row" style="gap:8px;margin-bottom:10px">';
+    Object.keys(T).forEach(function(t){ h += '<button' + (tab === t ? '' : ' class="s"') + ' data-tab="' + t + '" style="flex:1">' + T[t] + '</button>'; });
+    h += '</div>';
+    if (!tab) h += '<p class="mu">Choisis Les AE, Prof ou PP.</p>';
+    else {
+      var r = rows(); if (!r.length) h += '<p class="mu">Aucun compte.</p>';
+      r.forEach(function(x){
+        var d = ' data-t="' + tab + '" data-k="' + encodeURIComponent(x.k) + '"';
+        h += '<div class="card" style="margin:6px 0"><b>' + esc(x.n) + '</b>' + (x.b ? ' <span style="color:#c0392b">🔒 Bloqué</span>' : '') + '<div class="mu">' + esc(x.s) + '</div><div class="row" style="gap:6px;margin-top:6px;flex-wrap:wrap">' +
+          '<button class="s" data-a="reset"' + d + '>Réinitialiser</button><button class="s" data-a="edit"' + d + '>Modifier</button>' +
+          '<button class="d" data-a="del"' + d + '>Supprimer</button><button class="s" data-a="blk"' + d + '>' + (x.b ? 'Débloquer' : 'Bloquer') + '</button></div></div>';
+      });
+    }
+    ov.firstChild.innerHTML = h + '</div>';
+  }
+  function done(){ try { save(); } catch (e) {} paint(); try { render(); } catch (e) {} }
+  function pw2(msg){
+    var a = prompt(msg || 'Nouveau mot de passe (minimum 4 caractères) :'); if (a === null) return null;
+    if (a.length < 4) { alert('Le mot de passe doit contenir au moins 4 caractères.'); return null; }
+    return a;
+  }
+  function act(t, k, a){
+    var o, c;
+    if (t === 'ae') {
+      o = aes().find(function(x){ return x.id === k; }); if (!o) return;
+      if (a === 'reset') { if (confirm('Réinitialiser « ' + o.name + ' » ? L’AE devra créer un nouveau code.')) { o.pass = ''; done(); } }
+      else if (a === 'edit') { var n = prompt('Nom du compte AE :', o.name); if (n === null) return; var p = pw2('Nouveau code d’accès (minimum 4 caractères) :'); if (p === null) return; if (n.trim()) o.name = n.trim(); o.pass = p; done(); }
+      else if (a === 'del') { if (confirm('Supprimer « ' + o.name + ' » et ses professeurs ?')) { db.aeAccts = aes().filter(function(x){ return x.id !== k; }); done(); } }
+      else { o.blocked = !o.blocked; if (!o.blocked) delete o.blocked; done(); }
+    } else if (t === 'prof') {
+      db.espPass = db.espPass || {}; db.espSel = db.espSel || {};
+      if (a === 'reset') { if (!db.espPass[k]) return alert('Ce professeur n’a pas de compte.'); if (confirm('Réinitialiser ce compte ? Le professeur devra recréer son mot de passe.')) { delete db.espPass[k]; done(); } }
+      else if (a === 'edit') { var q = pw2(); if (q === null) return; if (Object.keys(db.espPass).some(function(x){ return x !== k && db.espPass[x] === q; })) return alert('Une erreur s’est produite.'); db.espPass[k] = q; done(); alert('Mot de passe changé.'); }
+      else if (a === 'del') { if (!db.espPass[k]) return alert('Ce professeur n’a pas de compte.'); if (confirm('Supprimer le compte de ce professeur ? Ses notes sont conservées.')) { delete db.espPass[k]; delete db.espSel[k]; done(); } }
+      else { setProfBlocked(k, !profBlocked(k)); done(); }
+    } else {
+      db.ppAcc = db.ppAcc || {}; o = db.ppAcc[k];
+      if (a === 'blk') { if (!o) return alert('Aucun accès PP pour cette classe.'); o.blocked = !o.blocked; if (!o.blocked) delete o.blocked; return done(); }
+      if (!o) { if (a === 'edit') { o = db.ppAcc[k] = { id: '', pass: '' }; } else return alert('Aucun accès PP pour cette classe.'); }
+      if (a === 'reset') { c = String(Math.floor(1000 + Math.random() * 9000)); if (confirm('Réinitialiser l’accès ? Un mot de passe temporaire sera créé.')) { o.pass = c; done(); alert('Identifiant : ' + o.id + '\nMot de passe temporaire : ' + c); } }
+      else if (a === 'edit') {
+        var id = prompt('Identifiant (CEG001M à CEG199M, se termine par M) :', o.id); if (id === null) { if (!o.id) delete db.ppAcc[k]; return; }
+        id = id.trim().toUpperCase();
+        if (!/^CEG(00[1-9]|0[1-9]\d|1\d\d)M$/.test(id)) { if (!o.id) delete db.ppAcc[k]; return alert('Identifiant invalide (ex. CEG111M).'); }
+        if (Object.keys(db.ppAcc).some(function(x){ return x !== k && db.ppAcc[x] && db.ppAcc[x].id === id; })) { if (!o.id) delete db.ppAcc[k]; return alert('Cet identifiant est déjà attribué.'); }
+        var pw = pw2('Mot de passe (minimum 4 caractères) :'); if (pw === null) { if (!o.id) delete db.ppAcc[k]; return; }
+        o.id = id; o.pass = pw; done();
+      }
+      else if (confirm('Supprimer l’accès PP de cette classe ?')) { delete db.ppAcc[k]; done(); }
+    }
+  }
+  function open(){
+    if (!isM()) return;
+    if (!ov) {
+      ov = document.createElement('div'); ov.id = 'cptov';
+      ov.style.cssText = 'position:fixed;inset:0;z-index:60;background:var(--bg);overflow:auto'; ov.innerHTML = '<div></div>';
+      ov.addEventListener('click', function(e){
+        var b = e.target.closest('button'); if (!b) return;
+        if (b.dataset.x) { ov.hidden = true; return; }
+        if (b.dataset.tab) { tab = b.dataset.tab; return paint(); }
+        if (b.dataset.a) act(b.dataset.t, decodeURIComponent(b.dataset.k), b.dataset.a);
+      });
+      document.body.appendChild(ov);
+    }
+    ov.hidden = false; paint();
+  }
+  /* Blocage effectif à la connexion */
+  var u1 = window.aeUnlock, u2 = window.aeSetup, u3 = window.ppLogin, u4 = window.espLogin;
+  function aeGuard(f){ return function(id){ var a = aes().find(function(x){ return x.id === id; }); if (a && a.blocked) return alert('Ce compte est bloqué par le MasterLog.'); return f.apply(this, arguments); }; }
+  if (u1) window.aeUnlock = aeGuard(u1);
+  if (u2) window.aeSetup = aeGuard(u2);
+  if (u3) window.ppLogin = function(cid){ var a = (db.ppAcc || {})[cid]; if (a && a.blocked) return alert('Ce compte est bloqué par le MasterLog.'); return u3.apply(this, arguments); };
+  if (u4) window.espLogin = function(){
+    var pw = (document.getElementById('espPw') || {}).value || '', P = db.espPass || {};
+    if (Object.keys(P).some(function(k){ return P[k] === pw && profBlocked(k); })) return alert('Ce compte est bloqué par le MasterLog.');
+    return u4.apply(this, arguments);
+  };
+  /* Bouton dans l'en-tête, à côté de « Les AE et PP » */
+  var pr = window.render;
+  window.render = function(){
+    var r = pr.apply(this, arguments);
+    try {
+      if (isM() && !document.getElementById('bcpt')) {
+        var lo = Array.from(document.querySelectorAll('header button')).find(function(x){ return x.getAttribute('onclick') === 'logout()'; });
+        if (lo) { var b = document.createElement('button'); b.id = 'bcpt'; b.className = 's'; b.textContent = '🔑 COMPTE Prof'; b.onclick = open; lo.parentNode.insertBefore(b, lo); }
+      }
+    } catch (e) {}
+    return r;
+  };
+})();
+</script>
 </body>
 </html>
